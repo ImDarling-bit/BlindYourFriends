@@ -7,6 +7,7 @@ La partie tourne en **pair-à-pair** : l'hôte fait tourner le jeu sur sa machin
 ## Jouer
 
 - **Page du jeu** : https://imdarling-bit.github.io/BlindYourFriends/
+- **Tuto pour les joueurs** (installation, créer et rejoindre une partie) : https://imdarling-bit.github.io/BlindYourFriends/tuto.html
 - **Lanceur Windows** : https://github.com/ImDarling-bit/BlindYourFriends/releases/latest (fichier `BlindYourFriends-Setup-x.y.z.exe`)
 
 ### L'hôte

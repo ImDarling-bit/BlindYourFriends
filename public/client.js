@@ -705,6 +705,10 @@
 
   // ---------------------------------------------------------------- init
 
+  // Le tuto s'ouvre à côté du jeu ; depuis le lanceur, dans sa version en ligne.
+  const publicUrl = (window.BYF_CONFIG || {}).publicUrl;
+  if (publicUrl) document.querySelectorAll('[data-tuto]').forEach((a) => { a.href = `${publicUrl}tuto.html`; });
+
   $('nameInput').value = load(NAME_KEY) || '';
   const urlCode = new URLSearchParams(location.search).get('code');
   if (urlCode) $('codeInput').value = urlCode.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);

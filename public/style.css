@@ -653,3 +653,118 @@ input[type='range']::-moz-range-thumb {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
 }
 #homeStatus:empty { display: none; }
+
+/* ------------------------------------------------------------ Tuto (tuto.html) */
+.tuto main { display: flex; flex-direction: column; gap: 28px; padding-bottom: calc(40px + env(safe-area-inset-bottom)); }
+.tuto a:not(.btn) { color: #ff9cc4; text-underline-offset: 3px; }
+.tuto .btn { display: inline-flex; justify-content: center; text-decoration: none; }
+.tuto-head { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding-top: 8px; }
+.tuto-head .btn { align-self: flex-start; }
+.tuto-head h1 { font-size: clamp(2rem, 9vw, 2.8rem); font-weight: 900; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.tuto-head h1 span { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.tuto-head .tagline { margin: 0; }
+
+.tuto-toc ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 6px; }
+.tuto-toc li::marker { color: var(--pink); font-weight: 900; }
+
+.tuto-section { display: flex; flex-direction: column; gap: 14px; scroll-margin-top: 16px; }
+.tuto-section > p, .phase p, .steps p, .role p, .faq p { margin: 0; line-height: 1.5; color: #d7cbe9; }
+.tuto-section strong { color: var(--text); }
+.tuto-section .title { display: flex; align-items: center; gap: 12px; font-size: 1.35rem; }
+.step-num {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--grad);
+  font-size: 1.05rem;
+  box-shadow: 0 6px 20px rgba(194, 56, 230, 0.35);
+}
+
+.role-grid { display: grid; gap: 12px; }
+@media (min-width: 560px) { .role-grid { grid-template-columns: 1fr 1fr; } }
+
+.steps { list-style: none; counter-reset: step; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.steps > li {
+  counter-increment: step;
+  position: relative;
+  padding-left: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.steps > li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: -2px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.8rem;
+  font-weight: 900;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--card-border);
+}
+.steps .btn { align-self: flex-start; }
+
+/* Aperçus d'écrans : décoratifs, non cliquables. */
+.mock { pointer-events: none; user-select: none; }
+.mock.card { gap: 10px; }
+.mock .input, .mock .btn { display: block; }
+.mock .btn { text-align: center; align-self: stretch; }
+.mock .row .input { flex: 1; }
+.mock-lobby { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+.mock-lobby .eyebrow { text-align: center; }
+.mock-lobby .big-code { font-size: 3rem; }
+.mock-lobby .invite .input { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mock-smartscreen {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 6px;
+  background: #0f5ea8;
+  color: #fff;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+.mock-smartscreen strong { font-size: 1.05rem; font-weight: 600; }
+.mock-link { text-decoration: underline; font-size: 0.9rem; }
+.mock-winbtn { align-self: flex-end; padding: 6px 16px; border: 1px solid rgba(255, 255, 255, 0.8); font-size: 0.9rem; }
+
+.tip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(138, 63, 252, 0.12);
+  border: 1px solid rgba(138, 63, 252, 0.4);
+  line-height: 1.5;
+}
+.tip span { color: #d7cbe9; }
+.tip-warn { background: rgba(255, 196, 61, 0.1); border-color: rgba(255, 196, 61, 0.45); }
+.tip-warn strong { color: #ffd57a; }
+
+.phase .eyebrow { color: #ff9cc4; }
+.points { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; color: #d7cbe9; }
+
+.faq { display: flex; flex-direction: column; gap: 10px; }
+.faq details { padding: 0; gap: 0; }
+.faq summary { padding: 16px 18px; font-weight: 700; cursor: pointer; list-style: none; display: flex; justify-content: space-between; gap: 12px; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: '+'; color: var(--pink); font-weight: 900; font-size: 1.2rem; line-height: 1; }
+.faq details[open] summary::after { content: '-'; }
+.faq details p { padding: 0 18px 16px; }
+
+.tuto-foot { display: flex; justify-content: center; }
+.tuto-foot .btn { min-width: 200px; }
+
+/* ------------------------------------------------------------ Lien vers le tuto dans le jeu */
+.home-help { text-align: center; margin: 0; }
+.home-help a, .rules-more a { color: #ff9cc4; font-weight: 600; text-underline-offset: 3px; }
+.rules-more { margin: 16px 0 0; text-align: center; }

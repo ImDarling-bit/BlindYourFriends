@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#12081f">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; object-src 'none'; base-uri 'none'">
+  <meta name="description" content="Installer BlindYourFriends et lancer une partie de blind test entre potes, étape par étape.">
+  <title>Tuto BlindYourFriends</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="tuto">
+  <div class="glow glow-a"></div>
+  <div class="glow glow-b"></div>
+
+  <main>
+    <header class="tuto-head">
+      <a class="btn btn-ghost btn-small" href="./">Retour au jeu</a>
+      <h1>Blind<span>Your</span>Friends</h1>
+      <p class="tagline">Le tuto : installer, créer une partie, jouer.</p>
+    </header>
+
+    <nav class="card tuto-toc" aria-label="Sommaire">
+      <p class="eyebrow">En 2 minutes</p>
+      <ol>
+        <li><a href="#besoin">Ce qu'il faut</a></li>
+        <li><a href="#installer">Installer le lanceur (l'hôte)</a></li>
+        <li><a href="#creer">Créer la partie et inviter</a></li>
+        <li><a href="#rejoindre">Rejoindre (les amis)</a></li>
+        <li><a href="#jouer">Jouer une manche</a></li>
+        <li><a href="#problemes">En cas de souci</a></li>
+      </ol>
+    </nav>
+
+    <!-- 1 -->
+    <section class="tuto-section" id="besoin">
+      <h2 class="title"><span class="step-num">1</span>Ce qu'il faut</h2>
+      <div class="role-grid">
+        <div class="card role">
+          <p class="eyebrow">L'hôte (une seule personne)</p>
+          <p>Un <strong>PC Windows</strong> avec internet. C'est lui qui fait tourner la partie : il garde le jeu ouvert jusqu'à la fin.</p>
+        </div>
+        <div class="card role">
+          <p class="eyebrow">Les amis</p>
+          <p>Un <strong>téléphone ou un PC</strong> avec un navigateur et internet. Rien à installer.</p>
+        </div>
+      </div>
+      <p class="muted">De 2 à 12 joueurs, hôte compris. Chacun joue sur son propre appareil, avec le son.</p>
+    </section>
+
+    <!-- 2 -->
+    <section class="tuto-section" id="installer">
+      <h2 class="title"><span class="step-num">2</span>Installer le lanceur</h2>
+      <p class="muted">Uniquement pour l'hôte, et une seule fois : le lanceur se met ensuite à jour tout seul.</p>
+      <ol class="steps">
+        <li>
+          <p>Télécharge l'installeur <strong>BlindYourFriends-Setup</strong> (fichier .exe) :</p>
+          <a class="btn btn-primary" href="https://github.com/ImDarling-bit/BlindYourFriends/releases/latest" target="_blank" rel="noopener">Télécharger le lanceur</a>
+        </li>
+        <li>
+          <p>Ouvre le fichier téléchargé. Windows peut afficher <em>« Windows a protégé votre ordinateur »</em> : le lanceur n'est pas signé par un éditeur payant, c'est normal.</p>
+          <div class="mock mock-smartscreen" aria-hidden="true">
+            <strong>Windows a protégé votre ordinateur</strong>
+            <span class="mock-link">Informations complémentaires</span>
+            <span class="mock-winbtn">Exécuter quand même</span>
+          </div>
+          <p>Clique sur <strong>Informations complémentaires</strong>, puis sur <strong>Exécuter quand même</strong>.</p>
+        </li>
+        <li>
+          <p>L'installation est automatique (pas de droits administrateur) et le jeu s'ouvre tout seul. Un raccourci <strong>BlindYourFriends</strong> est ajouté au bureau et au menu Démarrer.</p>
+        </li>
+        <li>
+          <p>Si Windows demande d'autoriser le programme sur le réseau, tu peux accepter pour les <strong>réseaux privés</strong>. Refuser ne bloque pas la partie.</p>
+        </li>
+      </ol>
+      <div class="tip">
+        <strong>Pas de PC Windows ?</strong>
+        <span>L'hôte peut aussi jouer depuis la <a href="./">page du jeu</a> dans un navigateur sur ordinateur. Il doit alors garder l'onglet du jeu affiché pendant toute la partie : un onglet en arrière-plan peut ralentir les minuteurs.</span>
+      </div>
+    </section>
+
+    <!-- 3 -->
+    <section class="tuto-section" id="creer">
+      <h2 class="title"><span class="step-num">3</span>Créer la partie et inviter</h2>
+      <ol class="steps">
+        <li>
+          <p>Dans le lanceur, tape ton pseudo puis clique sur <strong>Créer une partie</strong>.</p>
+          <div class="mock card" aria-hidden="true">
+            <span class="label">Ton pseudo</span>
+            <span class="input">DJ Canapé</span>
+            <span class="btn btn-primary">Créer une partie</span>
+          </div>
+        </li>
+        <li>
+          <p>Un <strong>code à 4 lettres</strong> apparaît. Clique sur <strong>Partager</strong> pour envoyer le lien à tes amis (SMS, Discord, WhatsApp...), ou dicte-leur simplement le code.</p>
+          <div class="mock mock-lobby" aria-hidden="true">
+            <span class="eyebrow">Code de la partie</span>
+            <span class="big-code">KTLG</span>
+            <span class="invite"><span class="input">https://imdarling-bit.github.io/BlindYourFriends/?code=KTLG</span><span class="btn btn-ghost btn-small">Partager</span></span>
+          </div>
+        </li>
+        <li>
+          <p>Choisis combien de sons chaque joueur devra choisir (de 1 à 5). Plus il y en a, plus la manche est longue.</p>
+          <div class="mock card" aria-hidden="true">
+            <div class="settings-row">
+              <div><h2>Sons par joueur</h2><p class="muted">60 s pour les choisir</p></div>
+              <div class="stepper"><span class="icon-btn icon-btn-small">-</span><output>2</output><span class="icon-btn icon-btn-small">+</span></div>
+            </div>
+          </div>
+        </li>
+        <li>
+          <p>Quand tout le monde apparaît dans la liste des joueurs, clique sur <strong>Lancer la manche</strong>.</p>
+        </li>
+      </ol>
+      <div class="tip tip-warn">
+        <strong>Important</strong>
+        <span>L'hôte garde le lanceur ouvert jusqu'à la fin. S'il le ferme, la partie s'arrête pour tout le monde.</span>
+      </div>
+    </section>
+
+    <!-- 4 -->
+    <section class="tuto-section" id="rejoindre">
+      <h2 class="title"><span class="step-num">4</span>Rejoindre (les amis)</h2>
+      <ol class="steps">
+        <li><p>Ouvre le lien reçu. Le code est déjà rempli.</p></li>
+        <li>
+          <p>Tape ton pseudo et clique sur <strong>Rejoindre</strong>. Sans lien, ouvre la <a href="./">page du jeu</a> et tape le code donné par l'hôte.</p>
+          <div class="mock card" aria-hidden="true">
+            <span class="label">Ton pseudo</span>
+            <span class="input">Bob</span>
+            <span class="row"><span class="input input-code">KTLG</span><span class="btn btn-ghost">Rejoindre</span></span>
+          </div>
+        </li>
+        <li><p>Attends que l'hôte lance la manche. Monte le son de ton téléphone.</p></li>
+      </ol>
+    </section>
+
+    <!-- 5 -->
+    <section class="tuto-section" id="jouer">
+      <h2 class="title"><span class="step-num">5</span>Jouer une manche</h2>
+
+      <div class="phase card">
+        <p class="eyebrow">Préparation · 30 s par son</p>
+        <p>Cherche un titre ou un artiste, écoute l'extrait avec le bouton lecture, puis clique sur <strong>Choisir</strong>. Choisis quelque chose qui te ressemble... ou pas du tout, pour brouiller les pistes. Personne ne voit tes choix, seulement ton avancement.</p>
+        <div class="mock chips" aria-hidden="true">
+          <span class="chip done"><span class="avatar" style="background:#ff3d8b">A</span>Alice <span class="count">2/2</span></span>
+          <span class="chip"><span class="avatar" style="background:#8a3ffc">B</span>Bob <span class="count">1/2</span></span>
+        </div>
+      </div>
+
+      <div class="phase card">
+        <p class="eyebrow">Écoute · 30 s par son</p>
+        <p>Les sons de tout le monde passent un par un, dans le désordre. Vote pour la personne qui, selon toi, a mis ce son. Tu peux changer d'avis tant que le temps n'est pas écoulé.</p>
+        <div class="mock vote-grid" aria-hidden="true">
+          <span class="vote-btn selected"><span class="avatar" style="background:#ff3d8b">A</span><span>Alice</span></span>
+          <span class="vote-btn"><span class="avatar" style="background:#20c3a6">C</span><span>Chloé</span></span>
+        </div>
+        <p>Si c'est ton son, tu ne votes pas : l'écran affiche <strong>« C'est ton son. Fais genre. »</strong> Ne te trahis pas.</p>
+      </div>
+
+      <div class="phase card">
+        <p class="eyebrow">Délibération · 30 s de plus</p>
+        <p>Seulement si les votes ne désignent pas tous la même personne. Vous voyez la répartition des votes (sans savoir qui a voté quoi) : débattez à voix haute et changez vos votes. Si tout le monde tombe d'accord, on passe directement à la suite.</p>
+      </div>
+
+      <div class="phase card">
+        <p class="eyebrow">Reveal</p>
+        <p>On découvre qui a mis le son, qui a voté quoi, et le classement.</p>
+        <ul class="points">
+          <li><strong>+100</strong> pour chaque bonne réponse</li>
+          <li><strong>+50</strong> pour le propriétaire du son, par joueur qui s'est trompé</li>
+        </ul>
+      </div>
+
+      <p class="muted">À la fin, le classement s'affiche. L'hôte peut <strong>relancer une manche</strong> : les scores se cumulent. Les règles sont aussi dans le jeu, avec le bouton <strong>?</strong> en bas à droite.</p>
+    </section>
+
+    <!-- 6 -->
+    <section class="tuto-section" id="problemes">
+      <h2 class="title"><span class="step-num">6</span>En cas de souci</h2>
+      <div class="faq">
+        <details class="card">
+          <summary>Je n'entends rien</summary>
+          <p>Appuie sur <strong>Activer le son</strong> s'il apparaît (certains navigateurs bloquent la lecture tant qu'on n'a pas touché l'écran). Vérifie aussi le volume du jeu avec l'icône haut-parleur en haut de l'écran, et le mode silencieux du téléphone. Sur iPhone, seuls les boutons de volume du téléphone agissent.</p>
+        </details>
+        <details class="card">
+          <summary>« Partie introuvable »</summary>
+          <p>Vérifie le code (4 lettres, ni I ni O). L'hôte doit avoir le lanceur ouvert avec la partie créée. Si l'hôte a fermé puis rouvert le jeu, c'est une nouvelle partie avec un nouveau code.</p>
+        </details>
+        <details class="card">
+          <summary>« Connexion perdue »</summary>
+          <p>Le jeu se reconnecte tout seul pendant 30 secondes : tu retrouves ta place et ton score. Si ça ne revient pas, rejoins à nouveau avec <strong>le même pseudo</strong> : ton score est conservé.</p>
+        </details>
+        <details class="card">
+          <summary>Impossible de se connecter en 4G</summary>
+          <p>Certains réseaux mobiles ou d'entreprise bloquent les connexions directes entre appareils. Passe sur un Wi-Fi (celui de l'hôte, par exemple) et réessaie.</p>
+        </details>
+        <details class="card">
+          <summary>« Ce pseudo est déjà pris »</summary>
+          <p>Deux joueurs ne peuvent pas avoir le même pseudo dans une partie (majuscules comprises). Ajoute une lettre ou un chiffre.</p>
+        </details>
+        <details class="card">
+          <summary>Mettre à jour le lanceur</summary>
+          <p>Rien à faire : le lanceur télécharge les nouvelles versions tout seul et les installe quand tu le fermes, jamais en pleine partie.</p>
+        </details>
+      </div>
+    </section>
+
+    <footer class="tuto-foot">
+      <a class="btn btn-primary" href="./">Aller jouer</a>
+    </footer>
+  </main>
+</body>
+</html>
