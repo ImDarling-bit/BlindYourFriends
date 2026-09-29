@@ -54,21 +54,25 @@ async function resolveTrack(id) {
 
 // ------------------------------------------------------------ Joueurs simulés
 
-const clients = new Map(); // id -> client
-const room = BYFGame.createRoom({
-  code: BYFGame.makeCode(),
-  config: CONFIG,
-  resolveTrack,
-  // Livraison asynchrone, comme sur le réseau.
-  send: (pid, state) => {
-    const c = clients.get(pid);
-    if (c) setImmediate(() => c.receive(state));
-  },
-});
+const clients = new Map(); // id -> client (ids uniques toutes parties confondues)
+
+function makeRoom() {
+  return BYFGame.createRoom({
+    code: BYFGame.makeCode(),
+    config: CONFIG,
+    resolveTrack,
+    // Livraison asynchrone, comme sur le réseau.
+    send: (pid, state) => {
+      const c = clients.get(pid);
+      if (c) setImmediate(() => c.receive(state));
+    },
+  });
+}
+const room = makeRoom();
 
 let nextId = 0;
-function client(label) {
-  const c = { label, id: `p${++nextId}`, token: `jeton-${label}-${nextId}`, states: [], waiters: [] };
+function client(label, inRoom = room) {
+  const c = { label, room: inRoom, id: `p${++nextId}`, token: `jeton-${label}-${nextId}`, states: [], waiters: [] };
   c.receive = (st) => {
     c.states.push(st);
     c.waiters = c.waiters.filter((w) => !w.test(st));
@@ -87,11 +91,11 @@ function waitFor(c, pred, what, since = c.states.length - 1, ms = 20000) {
   });
 }
 
-const emit = (c, event, payload) => room.handle(c.id, event, payload);
+const emit = (c, event, payload) => c.room.handle(c.id, event, payload);
 const join = (c, name, token = c.token) => emit(c, 'join', { name, token });
 function disconnect(c) {
   clients.delete(c.id);
-  room.disconnect(c.id);
+  c.room.disconnect(c.id);
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -179,7 +183,8 @@ async function main() {
   check(first.candidates.length === 2, 'on vote parmi les 2 autres joueurs');
 
   // Scénarios tournants sur les 6 sons.
-  const scenarios = ['accord', 'ralliement', 'desaccord', 'abstention', 'accord', 'desaccord'];
+  // Avec 3 joueurs il n'y a que 2 votants : pas de délibération possible (testée plus bas à 4).
+  const scenarios = ['accord', 'desaccord', 'abstention', 'accord', 'desaccord', 'abstention'];
   for (let k = 1; k <= 6; k++) {
     const since = all.map((c) => c.states.length - 1);
     const gs = await Promise.all(all.map((c, i) => waitFor(c, (s) => s.phase === 'guess' && s.sound.index === k, `son ${k}`, since[i])));
@@ -196,18 +201,8 @@ async function main() {
     const t0 = Date.now();
 
     if (scenario === 'accord') {
-      await emit(X, 'vote', { targetId: Y.id }); // X change d'avis avant la fin
-      await emit(X, 'vote', { targetId: ownerId });
-      await emit(Y, 'vote', { targetId: ownerId });
-      expected[X.id] += 100;
-      expected[Y.id] += 100;
-    } else if (scenario === 'ralliement') {
-      await emit(X, 'vote', { targetId: ownerId });
-      await emit(Y, 'vote', { targetId: X.id });
-      const d = await waitFor(A, (s) => s.phase === 'deliberate', 'délibération');
-      check(Date.now() - t0 < 1500, 'tout le monde a voté sans être d’accord : délibération immédiate');
-      check(d.tally.length === 2 && d.tally.every((t) => t.count === 1), 'répartition des votes affichée (1 / 1)');
-      check(!JSON.stringify(d.tally).includes('voterId'), 'répartition anonyme');
+      check((await emit(X, 'vote', { targetId: ownerId })).ok, `${X.label} vote`);
+      check(/verrouillé/.test((await emit(X, 'vote', { targetId: Y.id })).error || ''), 'changer son vote est refusé');
       await emit(Y, 'vote', { targetId: ownerId });
       expected[X.id] += 100;
       expected[Y.id] += 100;
@@ -225,15 +220,12 @@ async function main() {
     const elapsed = Date.now() - t0;
     const deliberated = A.states.slice(markA + 1).some((s) => s.phase === 'deliberate');
 
-    if (scenario === 'accord') {
-      check(!deliberated && elapsed < 1500, `unanimes : reveal immédiat sans délibération (${elapsed} ms)`);
-    } else if (scenario === 'ralliement') {
-      check(deliberated && elapsed < 1500, `ralliement pendant la délibération : reveal immédiat (${elapsed} ms)`);
-    } else if (scenario === 'desaccord') {
-      check(deliberated && elapsed >= 1800, `désaccord maintenu : reveal à la fin de la délibération (${elapsed} ms)`);
+    if (scenario === 'accord' || scenario === 'desaccord') {
+      check(!deliberated && elapsed < 1500, `tout le monde a voté (${scenario}) : reveal immédiat sans délibération (${elapsed} ms)`);
     } else if (scenario === 'abstention') {
       check(!deliberated && elapsed >= 2500, `un seul avis : pas de délibération, reveal au timeout (${elapsed} ms)`);
     }
+    check(!('voteCount' in gs[0]) && !('voterTotal' in gs[0]), "aucun compteur de votes pendant l'écoute");
 
     check(rs.reveal.ownerId === ownerId, `reveal : c'était ${rs.reveal.ownerName}`);
     check(rs.players.every((p) => p.score === expected[p.id]), `scores : ${rs.players.map((p) => `${p.name}=${p.score}`).join(', ')}`);
@@ -277,6 +269,47 @@ async function main() {
   }
   const end2 = await waitFor(A, (s) => s.phase === 'end' && s.round === 2, 'fin manche 2');
   check(end2.players.every((p) => p.score === expected[p.id]), `scores cumulés : ${end2.players.map((p) => `${p.name}=${p.score}`).join(', ')}`);
+
+  // ------------------------------------------------------------ Délibération (4 joueurs)
+  console.log('\nDélibération : partie à 4 joueurs, 1 son chacun');
+  const room4 = makeRoom();
+  const P = ['Hugo', 'Inès', 'Jules', 'Katia'].map((n) => client(n, room4));
+  for (const p of P) await join(p, p.label);
+  const [H] = P;
+  await emit(H, 'settings', { songsPerPlayer: 1 });
+  await emit(H, 'start');
+  await Promise.all(P.map((p) => waitFor(p, (s) => s.phase === 'pick', 'pick', 0)));
+  const tracks4 = [ra[4], ra[5], rb[3], rc[2]];
+  const owners4 = new Map(P.map((p, i) => [tracks4[i].id, p]));
+  for (let i = 0; i < 4; i++) await emit(P[i], 'pick', { id: tracks4[i].id });
+
+  const expected4 = Object.fromEntries(P.map((p) => [p.id, 0]));
+  for (let k = 1; k <= 2; k++) {
+    const g4 = await waitFor(H, (s) => s.phase === 'guess' && s.sound.index === k, `son ${k}`, 0);
+    const owner = owners4.get(g4.sound.track.id);
+    const [X, Y, Z] = P.filter((p) => p !== owner);
+    const t0 = Date.now();
+    await emit(X, 'vote', { targetId: owner.id });
+    await emit(Y, 'vote', { targetId: X.id });
+    expected4[X.id] += 100;
+    expected4[owner.id] += 50;
+    await sleep(300);
+    check(H.state.phase === 'guess', `son ${k} : votes divergents mais ${Z.label} n'a pas voté, l'écoute continue`);
+    const d = await waitFor(H, (s) => s.phase === 'deliberate' && s.sound.index === k, `délibération ${k}`);
+    check(Date.now() - t0 >= 2500, `son ${k} : délibération à la fin de l'écoute`);
+    check(d.tally.reduce((n, t) => n + t.count, 0) === 2 && !JSON.stringify(d.tally).includes('voterId'), 'répartition anonyme des 2 votes');
+    check(/verrouillé/.test((await emit(Y, 'vote', { targetId: owner.id })).error || ''), 'pas de changement de vote en délibération');
+    const t1 = Date.now();
+    if (k === 1) {
+      await emit(Z, 'vote', { targetId: owner.id });
+      expected4[Z.id] += 100;
+    }
+    const r4 = await waitFor(H, (s) => s.phase === 'reveal' && s.sound.index === k, `reveal ${k}`);
+    if (k === 1) check(Date.now() - t1 < 1500, `${Z.label} vote pendant la délibération : reveal immédiat`);
+    else check(Date.now() - t1 >= 1500, `${Z.label} ne vote pas : reveal à la fin de la délibération`);
+    check(r4.players.every((p) => p.score === expected4[p.id]), `scores : ${r4.players.map((p) => `${p.name}=${p.score}`).join(', ')}`);
+  }
+  room4.destroy();
 
   // ------------------------------------------------------------ Départs
   console.log('\nDéparts');

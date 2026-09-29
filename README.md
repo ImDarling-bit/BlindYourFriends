@@ -25,8 +25,8 @@ Ouvrir le lien d'invitation (ou la page du jeu, puis taper le code à 4 lettres)
 ## Déroulement
 
 1. **Préparation** : chaque joueur choisit le nombre de sons fixé par l'hôte (1 à 5), 30 s par son.
-2. **Écoute** (30 s par son) : on vote pour la personne qui a mis le son. Le propriétaire ne vote pas.
-3. **Délibération** (30 s de plus) : seulement si les votes ne désignent pas tous la même personne. On débat et on peut changer son vote. Si tout le monde tombe d'accord, reveal immédiat.
+2. **Écoute** (30 s par son) : on vote pour la personne qui a mis le son. Le premier vote est définitif. Le propriétaire ne vote pas. Dès que tout le monde a voté, reveal immédiat.
+3. **Délibération** (30 s de plus) : seulement si les premiers votes ne désignent pas tous la même personne et qu'il reste des joueurs sans vote. On voit la répartition des votes et on débat ; les indécis votent à leur tour.
 4. **Reveal** : qui l'a mis, qui a voté quoi, les points gagnés.
 
 Points : +100 par bonne réponse, +50 pour le propriétaire par joueur piégé. Les scores se cumulent d'une manche à l'autre. Les règles sont aussi dans le jeu (bouton `?` en bas à droite) et le volume se règle dans la barre du haut.

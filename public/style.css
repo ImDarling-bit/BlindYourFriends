@@ -401,6 +401,9 @@ h2 { font-size: 1.1rem; font-weight: 800; }
 }
 .vote-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vote-btn:active { transform: scale(0.97); }
+.vote-btn:disabled { cursor: default; }
+.vote-btn:disabled:not(.selected) { opacity: 0.4; }
+.vote-btn:disabled:active { transform: none; }
 .vote-btn.selected { border-color: var(--pink); background: rgba(255, 61, 139, 0.18); box-shadow: 0 0 24px rgba(255, 61, 139, 0.3); }
 
 .notice {
@@ -768,3 +771,4 @@ input[type='range']::-moz-range-thumb {
 .home-help { text-align: center; margin: 0; }
 .home-help a, .rules-more a { color: #ff9cc4; font-weight: 600; text-underline-offset: 3px; }
 .rules-more { margin: 16px 0 0; text-align: center; }
+#guessBody > .eyebrow { margin-bottom: 10px; }

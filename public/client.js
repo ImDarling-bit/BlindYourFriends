@@ -203,9 +203,9 @@
     $('rulesList').innerHTML = `
       <li>Un joueur crée la partie et partage le code à 4 lettres. De <strong>${c.minPlayers} à ${c.maxPlayers} joueurs</strong>.</li>
       <li><strong>Préparation</strong> : chacun choisit en secret ${songs}, avec ${c.pickTime} s par son. Les autres voient ton avancement, jamais tes choix.</li>
-      <li><strong>Écoute</strong> : tous les sons passent un par un, dans le désordre, <strong>${c.guessTime} s</strong> chacun. Vote pour la personne qui l'a mis. Tu peux changer d'avis.</li>
+      <li><strong>Écoute</strong> : tous les sons passent un par un, dans le désordre, <strong>${c.guessTime} s</strong> chacun. Vote pour la personne qui l'a mis : <strong>ton premier choix est définitif</strong>.</li>
       <li>Si c'est ton son, tu ne votes pas : fais genre.</li>
-      <li><strong>Délibération</strong> : si les votes ne désignent pas tous la même personne, vous avez <strong>${c.deliberateTime} s de plus</strong> pour débattre et changer vos votes.</li>
+      <li><strong>Délibération</strong> : si les premiers votes ne désignent pas tous la même personne et que certains n'ont pas encore voté, ils ont <strong>${c.deliberateTime} s de plus</strong> pour écouter le débat avant de se décider.</li>
       <li><strong>Points</strong> : +${c.pointsGoodGuess} par bonne réponse. Le propriétaire du son gagne +${c.pointsPerFooled} par joueur qui s'est trompé.</li>
       <li>L'hôte peut relancer une manche à la fin : les scores se cumulent.</li>`;
   }
@@ -353,7 +353,7 @@
 
     $('deliberateBanner').classList.toggle('hidden', !deliberating);
     if (deliberating) {
-      const max = Math.max(1, S.voteCount);
+      const max = Math.max(1, ...(S.tally || []).map((t) => t.count));
       $('tally').innerHTML = (S.tally || []).map((t) => `<li>
           <span class="player-name">${esc(t.name)}</span><span>${plural(t.count, 'vote')}</span>
           <span class="bar"><i style="width:${Math.round((t.count / max) * 100)}%"></i></span>
@@ -366,14 +366,15 @@
     } else if (!S.canVote) {
       body = '<div class="notice"><strong>Tu joues à la prochaine manche.</strong><span>Profite du son.</span></div>';
     } else {
-      body = `<p class="eyebrow center">${deliberating ? 'Ton vote final' : 'Qui a mis ça ?'}</p><div class="vote-grid">` +
+      // Le premier vote est définitif : une fois voté, les boutons sont verrouillés.
+      const locked = !!S.myVote;
+      body = `<p class="eyebrow center">${locked ? 'Vote verrouillé' : 'Qui a mis ça ? Ton premier choix est définitif.'}</p><div class="vote-grid">` +
         S.candidates.map((c) => `
-          <button class="vote-btn${S.myVote === c.id ? ' selected' : ''}" data-vote="${esc(c.id)}">
+          <button class="vote-btn${S.myVote === c.id ? ' selected' : ''}" data-vote="${esc(c.id)}" ${locked ? 'disabled' : ''}>
             ${avatar(c.name)}<span>${esc(c.name)}</span>
           </button>`).join('') + '</div>';
     }
     $('guessBody').innerHTML = body;
-    $('voteProgress').textContent = `${S.voteCount} / ${plural(S.voterTotal, 'vote')}`;
   }
 
   function rankingHtml(gains) {
@@ -530,12 +531,18 @@
 
   $('guessBody').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-vote]');
-    if (!btn) return;
+    if (!btn || btn.disabled) return;
     const targetId = btn.dataset.vote;
-    // Retour visuel immédiat, le serveur confirme via l'état.
-    $('guessBody').querySelectorAll('.vote-btn').forEach((b) => b.classList.toggle('selected', b === btn));
+    // Verrouillage immédiat à l'écran, l'hôte confirme via l'état.
+    $('guessBody').querySelectorAll('.vote-btn').forEach((b) => {
+      b.classList.toggle('selected', b === btn);
+      b.disabled = true;
+    });
     send('vote', { targetId }, (res) => {
-      if (res && res.error) toast(res.error);
+      if (res && res.error) {
+        toast(res.error);
+        if (S && (S.phase === 'guess' || S.phase === 'deliberate')) renderGuess();
+      }
     });
   });
 

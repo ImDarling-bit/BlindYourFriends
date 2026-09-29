@@ -117,6 +117,7 @@
     const candidates = () => [...new Set(room.sounds.map((s) => s.ownerId))].filter((id) => room.players.has(id));
     // Les votants qui se sont prononcés ne désignent pas tous la même personne.
     const disagree = () => new Set(room.votes.values()).size > 1;
+    const allVoted = () => voters().every((p) => room.votes.has(p.id));
 
     function startRound() {
       room.round++;
@@ -155,9 +156,10 @@
       broadcast();
     }
 
-    // Fin de l'écoute : désaccord -> délibération, sinon reveal.
+    // Fin de l'écoute. Les votes étant définitifs, la délibération ne sert qu'aux indécis :
+    // elle n'a lieu que si les premiers votes divergent et qu'il reste des joueurs sans vote.
     function endListen() {
-      if (!disagree()) return doReveal();
+      if (!disagree() || allVoted()) return doReveal();
       room.phase = 'deliberate';
       schedule(DELIBERATE_MS, doReveal);
       broadcast();
@@ -213,9 +215,7 @@
         if (active.every((p) => (room.picks.get(p.id) || []).length >= needed)) return endPick();
       } else if (isVoting()) {
         if (!room.players.has(room.current.ownerId)) return nextSound(); // le proprio est parti : on saute
-        const allVoted = voters().every((p) => room.votes.has(p.id));
-        if (allVoted && room.phase === 'guess') return endListen();
-        if (allVoted && room.phase === 'deliberate' && !disagree()) return doReveal();
+        if (allVoted()) return doReveal(); // plus aucun vote ne peut changer
       }
       broadcast();
     }
@@ -253,9 +253,6 @@
         s.isMine = isMine;
         s.canVote = !!(me && me.active) && !isMine;
         s.myVote = room.votes.get(pid) || null;
-        // Juste des compteurs : exposer qui a voté trahirait le proprio (il ne vote jamais).
-        s.voteCount = room.votes.size;
-        s.voterTotal = voters().length;
         s.candidates = candidates()
           .filter((id) => id !== pid)
           .map((id) => ({ id, name: room.players.get(id).name }));
@@ -397,6 +394,7 @@
       if (!me || !isVoting()) return { error: 'Pas de vote en cours.' };
       if (!me.active) return { error: 'Tu joues à la prochaine manche.' };
       if (room.current.ownerId === pid) return { error: "C'est ton son. Fais genre." };
+      if (room.votes.has(pid)) return { error: 'Ton vote est déjà verrouillé.' };
       if (targetId === pid || !candidates().includes(targetId)) return { error: 'Vote invalide.' };
       room.votes.set(pid, targetId);
       checkProgress();
