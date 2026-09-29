@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#12081f">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://api.deezer.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https: data:; media-src https: data:; connect-src 'self' https: wss:; object-src 'none'; base-uri 'none'">
+  <title>BlindYourFriends</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="glow glow-a"></div>
+  <div class="glow glow-b"></div>
+
+  <header class="topbar hidden" id="topbar">
+    <div class="topbar-code">Code <strong id="tbCode"></strong></div>
+    <div class="topbar-round" id="tbRound"></div>
+    <div class="volume">
+      <button class="icon-btn icon-btn-small" id="volumeBtn" aria-label="Volume" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path id="volumeWaves" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <div class="volume-pop hidden" id="volumePop">
+        <label class="label" for="volumeRange">Volume <span id="volumeValue"></span></label>
+        <input type="range" id="volumeRange" min="0" max="100" step="1">
+      </div>
+    </div>
+    <div class="timer hidden" id="timer">
+      <svg viewBox="0 0 44 44" aria-hidden="true">
+        <circle class="timer-track" cx="22" cy="22" r="19"></circle>
+        <circle class="timer-bar" id="timerBar" cx="22" cy="22" r="19"></circle>
+      </svg>
+      <span id="timerText">0</span>
+    </div>
+  </header>
+
+  <main id="app">
+    <!-- Accueil -->
+    <section class="screen" id="screen-home">
+      <div class="brand">
+        <div class="brand-disc"></div>
+        <h1>Blind<span>Your</span>Friends</h1>
+        <p class="tagline">Qui a mis ça ? Le blind test où on devine <em>qui</em> a choisi le son.</p>
+      </div>
+      <div class="card">
+        <label class="label" for="nameInput">Ton pseudo</label>
+        <input id="nameInput" class="input" maxlength="20" autocomplete="nickname" placeholder="DJ Canapé">
+        <button class="btn btn-primary" id="createBtn">Créer une partie</button>
+        <div class="divider"><span>ou rejoindre</span></div>
+        <div class="row">
+          <input id="codeInput" class="input input-code" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CODE">
+          <button class="btn btn-ghost" id="joinBtn">Rejoindre</button>
+        </div>
+        <p class="muted" id="homeStatus" aria-live="polite"></p>
+        <p class="error" id="homeError" role="alert"></p>
+      </div>
+    </section>
+
+    <!-- Lobby -->
+    <section class="screen hidden" id="screen-lobby">
+      <p class="eyebrow">Code de la partie</p>
+      <div class="big-code" id="lobbyCode"></div>
+      <div class="invite">
+        <input class="input" id="inviteLink" readonly>
+        <button class="btn btn-ghost btn-small" id="shareBtn">Partager</button>
+      </div>
+      <div class="card settings" data-settings></div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Joueurs</h2>
+          <span class="muted" id="lobbyCount"></span>
+        </div>
+        <ul class="player-list" id="lobbyPlayers"></ul>
+      </div>
+      <button class="btn btn-primary" id="startBtn">Lancer la manche</button>
+      <p class="muted center" id="lobbyHint"></p>
+      <button class="btn btn-link" data-action="leave">Quitter la partie</button>
+    </section>
+
+    <!-- Pick -->
+    <section class="screen hidden" id="screen-pick">
+      <h2 class="title" id="pickTitle">Choisis tes sons</h2>
+      <p class="muted">Personne ne verra tes choix avant le reveal.</p>
+      <div class="my-picks" id="myPicks"></div>
+      <div class="search">
+        <input id="searchInput" class="input" type="search" placeholder="Titre, artiste..." autocomplete="off" enterkeyhint="search">
+        <div class="spinner hidden" id="searchSpinner"></div>
+      </div>
+      <ul class="results" id="results"></ul>
+      <p class="muted center" id="searchHint">Tape quelque chose pour chercher.</p>
+      <div class="chips-wrap">
+        <p class="eyebrow">Avancement</p>
+        <div class="chips" id="pickChips"></div>
+      </div>
+    </section>
+
+    <!-- Guess / délibération -->
+    <section class="screen hidden" id="screen-guess">
+      <p class="eyebrow center" id="guessCounter"></p>
+      <div class="deliberate hidden" id="deliberateBanner">
+        <strong>Vous n'êtes pas d'accord</strong>
+        <span>Temps de délibération : débattez et changez d'avis si besoin.</span>
+        <ul class="tally" id="tally"></ul>
+      </div>
+      <div class="vinyl-wrap">
+        <div class="vinyl" id="guessVinyl"><img id="guessCover" alt=""></div>
+      </div>
+      <div class="track-info">
+        <div class="track-title" id="guessTitle"></div>
+        <div class="track-artist" id="guessArtist"></div>
+      </div>
+      <button class="btn btn-primary hidden" id="unlockBtn">Activer le son</button>
+      <div id="guessBody"></div>
+      <p class="muted center" id="voteProgress"></p>
+    </section>
+
+    <!-- Reveal -->
+    <section class="screen hidden" id="screen-reveal">
+      <p class="eyebrow center" id="revealCounter"></p>
+      <div class="reveal-head">
+        <img class="reveal-cover" id="revealCover" alt="">
+        <div>
+          <div class="track-title" id="revealTitle"></div>
+          <div class="track-artist" id="revealArtist"></div>
+        </div>
+      </div>
+      <div class="reveal-owner" id="revealOwner"></div>
+      <div class="card">
+        <h2>Votes</h2>
+        <ul class="vote-list" id="revealVotes"></ul>
+      </div>
+      <div class="card">
+        <h2>Classement</h2>
+        <ol class="ranking" id="revealRanking"></ol>
+      </div>
+    </section>
+
+    <!-- End -->
+    <section class="screen hidden" id="screen-end">
+      <h2 class="title center">Classement final</h2>
+      <p class="muted center" id="endRound"></p>
+      <ol class="ranking ranking-final" id="endRanking"></ol>
+      <div class="card settings" data-settings></div>
+      <button class="btn btn-primary" id="restartBtn">Relancer une manche</button>
+      <p class="muted center" id="endHint"></p>
+      <button class="btn btn-link" data-action="leave">Quitter la partie</button>
+    </section>
+  </main>
+
+  <button class="rules-fab" id="rulesBtn" aria-label="Règles du jeu" aria-haspopup="dialog">?</button>
+
+  <div class="modal hidden" id="rulesModal" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="rulesTitle">Règles du jeu</h2>
+        <button class="icon-btn icon-btn-small" id="rulesClose" aria-label="Fermer">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <ol class="rules" id="rulesList"></ol>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="vendor/peerjs.min.js"></script>
+  <script src="config.js"></script>
+  <script src="game.js"></script>
+  <script src="deezer.js"></script>
+  <script src="net.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>

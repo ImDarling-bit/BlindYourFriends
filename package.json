@@ -1,0 +1,58 @@
+{
+  "name": "blind-your-friends",
+  "version": "1.0.0",
+  "description": "BlindYourFriends : blind test multijoueur entre potes",
+  "main": "electron/main.js",
+  "private": true,
+  "author": "ImDarling-bit",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ImDarling-bit/BlindYourFriends.git"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "desktop": "electron .",
+    "dist": "electron-builder --win --publish never",
+    "vendor": "node -e \"require('fs').copyFileSync('node_modules/peerjs/dist/peerjs.min.js','public/vendor/peerjs.min.js')\"",
+    "simulate": "node test/simulate.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "peerjs": "^1.5.5"
+  },
+  "build": {
+    "appId": "fr.blindyourfriends.app",
+    "productName": "BlindYourFriends",
+    "files": [
+      "electron/**",
+      "public/**",
+      "server.js",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "artifactName": "BlindYourFriends-Setup-${version}.${ext}"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "ImDarling-bit",
+      "repo": "BlindYourFriends",
+      "releaseType": "release"
+    }
+  }
+}

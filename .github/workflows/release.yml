@@ -1,0 +1,40 @@
+# Construit le lanceur Windows et le publie dans les releases GitHub quand un tag vX.Y.Z est poussé.
+# Les lanceurs déjà installés se mettent à jour tout seuls à partir de ces releases.
+name: Lanceur Windows
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Le tag correspond à la version du package
+        shell: bash
+        run: |
+          version="v$(node -p "require('./package.json').version")"
+          if [ "$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME différent de la version $version du package.json"
+            exit 1
+          fi
+
+      - run: npm ci
+
+      - name: Partie simulée
+        run: npm run simulate
+
+      - name: Construction et publication
+        run: npx electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
