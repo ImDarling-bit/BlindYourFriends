@@ -116,6 +116,28 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
   console.log('Simulation du moteur de jeu\n');
+
+  // ------------------------------------------------------------ Correction des réponses
+  console.log('Correction des réponses tapées');
+  const answerCases = [
+    ['daft pnuk', 'Get Lucky', 'Daft Punk', '-A', 'lettres inversées tolérées'],
+    ['get luky', 'Get Lucky', 'Daft Punk', 'T-', 'faute de frappe tolérée'],
+    ['lucky', 'Get Lucky', 'Daft Punk', '--', 'un mot seul du titre ne suffit pas'],
+    ['daft punk lucky', 'Get Lucky', 'Daft Punk', '--', 'artiste + titre incomplet refusé'],
+    ['tot', 'Africa', 'Toto', '--', 'nom court : pas de tolérance'],
+    ['sweet dreams', 'Sweet Dreams (Are Made of This)', 'Eurythmics', 'T-', 'titre sans la parenthèse'],
+    ['u2 with or without you', 'With Or Without You', 'U2', 'TA', 'artiste court + titre long'],
+    ['aya nakamura 40%', '40%', 'Aya Nakamura', 'TA', 'artiste long + titre court'],
+    ['starboy the weeknd', 'Starboy', 'The Weeknd', 'TA', 'article au milieu de la réponse'],
+    ['weeknd hills', 'The Hills', 'The Weeknd', 'TA', 'articles omis'],
+    ['ma meilleure ennemie ft. coldplay stromae', 'Ma Meilleure Ennemie ft. Coldplay', 'Stromae', 'TA', '"ft." tapé dans la réponse'],
+  ];
+  for (const [guess, title, artist, want, label] of answerCases) {
+    const r = Catalog.matchAnswer(guess, { title, artist });
+    const got = (r.title ? 'T' : '-') + (r.artist ? 'A' : '-');
+    check(got === want, `${label} (« ${guess} » -> ${got})`);
+  }
+  console.log('');
   const A = client('Alice');
   const B = client('Bob');
   let C = client('Chloé');
@@ -430,7 +452,7 @@ async function main() {
       await waitFor(Q1, (s) => s.phase === 'reveal' && s.sound.index === k, `reveal ${k}`);
     }
     await sleep(20);
-    check(Q1.state.players.every((p) => p.score === expectedQ[p.id]), `son ${k} : ${Q1.state.players.map((p) => `${p.name}=${p.score}`).join(', ')}`);
+    check(Q1.state.players.every((p) => p.score === expectedQ[p.id]), `son ${k} (${track.artist} - ${track.title}) : ${Q1.state.players.map((p) => `${p.name}=${p.score}`).join(', ')}`);
   }
   await waitFor(Q1, (s) => s.phase === 'end', 'fin du blind test');
   check((await emit(Q1, 'start')).ok, 'seconde manche de blind test');

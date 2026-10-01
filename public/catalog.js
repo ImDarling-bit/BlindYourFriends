@@ -70,43 +70,49 @@
 
   // ---------------------------------------------------------------- réponses tapées
 
-  const ARTICLES = /^(the|le|la|les|l|un|une|des)\s+/;
+  const ARTICLES = /^(the|le|la|les|l|un|une|des) /;
+  const FEAT = /\s(feat|ft|featuring)\.?\s.*$/i;
 
-  // Minuscules, sans accents ni ponctuation, sans mentions entre parenthèses ni "feat.".
-  function clean(text) {
+  // Minuscules, sans accents ni ponctuation. S'applique aussi bien à la réponse tapée
+  // qu'aux réponses attendues.
+  function normalize(text) {
     return String(text || '')
       .toLowerCase()
       .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
-      .replace(/\(.*?\)|\[.*?\]/g, ' ')
-      .replace(/\s(feat|ft|featuring)\.?\s.*$/, ' ')
+      .replace(/[\u0300-\u036f]/g, '')
       .replace(/&/g, ' et ')
       .replace(/[^a-z0-9]+/g, ' ')
-      .trim()
-      .replace(ARTICLES, '');
+      .trim();
   }
 
-  // Version compacte pour comparer sans tenir compte des espaces ("lamour" = "l'amour").
-  const compact = (text) => clean(text).replace(/ /g, '');
+  // Comparaison sans espaces ("lamour" = "l'amour").
+  const squash = (text) => text.replace(/ /g, '');
+
+  // Une réponse attendue, avec et sans son article ("the weeknd" et "weeknd").
+  function forms(text) {
+    const n = normalize(text);
+    return [squash(n), squash(n.replace(ARTICLES, ''))];
+  }
 
   function unique(list) {
     return [...new Set(list.filter((v) => v.length >= 2))];
   }
 
-  // Titre : complet, ou une de ses parties ("Goldorak : La légende d'Actarus" -> "goldorak").
-  // Le titre complet avec sa parenthèse est accepté aussi ("Sweet Dreams (Are Made of This)").
+  // Titre : complet, sans la parenthèse ni le "feat.", ou une de ses parties
+  // ("Goldorak : La légende d'Actarus" -> "goldorak"). Le titre avec sa parenthèse
+  // est accepté aussi ("Sweet Dreams (Are Made of This)").
   function titleVariants(title) {
     const full = String(title || '');
-    const raw = full.replace(/\(.*?\)|\[.*?\]/g, ' ');
+    const raw = full.replace(/\(.*?\)|\[.*?\]/g, ' ').replace(FEAT, ' ');
     const parts = raw.split(/\s[-–]\s|:|\//);
-    return unique([compact(raw), compact(full.replace(/[()[\]]/g, ' ')), ...parts.map(compact)]);
+    return unique([raw, full.replace(/[()[\]]/g, ' '), ...parts].flatMap(forms));
   }
 
   // Artiste : nom complet, ou un des artistes d'un duo ("Stromae & Pomme" -> "stromae").
   function artistVariants(artist) {
     const raw = String(artist || '');
     const parts = raw.split(/,|&|\/|\s(?:x|et|and|feat\.?|ft\.?|featuring|vs\.?)\s/i);
-    return unique([compact(raw), ...parts.map(compact)]);
+    return unique([raw, ...parts].flatMap(forms));
   }
 
   // Distance d'édition où deux lettres inversées ("pnuk") ne comptent que pour une faute.
@@ -129,10 +135,9 @@
     return d[a.length][b.length];
   }
 
-  // Une faute de frappe tolérée tous les 5 caractères, 3 au maximum ; rien sous 4 caractères.
+  // Une faute de frappe tolérée tous les 5 caractères, 3 au maximum ; rien sous 5 caractères.
   function close(guess, expected) {
     if (guess === expected) return true;
-    if (expected.length < 4) return false;
     const max = Math.min(3, Math.floor(expected.length / 5));
     return max > 0 && distance(guess, expected, max) <= max;
   }
@@ -143,25 +148,24 @@
    * Accepte aussi "artiste titre" ou "titre artiste" d'un coup.
    */
   function matchAnswer(guess, track) {
-    const g = compact(guess);
+    const g = squash(normalize(guess));
     const result = { title: false, artist: false };
     if (g.length < 2) return result;
     const titles = titleVariants(track.title);
     const artists = artistVariants(track.artist);
-    result.title = titles.some((t) => close(g, t));
-    result.artist = artists.some((a) => close(g, a));
-    if (!result.title && !result.artist) {
-      // Réponse en deux morceaux : chaque morceau doit valoir seul son titre ou son artiste.
-      for (let i = 2; i <= g.length - 2 && !result.title; i++) {
-        const head = g.slice(0, i);
-        const tail = g.slice(i);
-        const both =
-          (artists.some((a) => close(head, a)) && titles.some((t) => close(tail, t))) ||
-          (titles.some((t) => close(head, t)) && artists.some((a) => close(tail, a)));
-        if (both) {
-          result.title = true;
-          result.artist = true;
-        }
+    const isTitle = (x) => titles.some((t) => close(x, t));
+    const isArtist = (x) => artists.some((a) => close(x, a));
+    result.title = isTitle(g);
+    result.artist = isArtist(g);
+    // Réponse en deux morceaux : chaque morceau doit valoir seul son titre ou son artiste.
+    // Tenté même si la réponse entière ressemble déjà à l'un des deux : avec la tolérance,
+    // un titre long peut absorber un artiste court ("u2 with or without you").
+    for (let i = 2; i <= g.length - 2 && !(result.title && result.artist); i++) {
+      const head = g.slice(0, i);
+      const tail = g.slice(i);
+      if ((isArtist(head) && isTitle(tail)) || (isTitle(head) && isArtist(tail))) {
+        result.title = true;
+        result.artist = true;
       }
     }
     return result;
@@ -180,6 +184,6 @@
     source: (id) => byId(SOURCES, id),
     isQuiz: (mode) => QUIZ_MODES.includes(mode),
     matchAnswer,
-    clean,
+    normalize,
   };
 });
