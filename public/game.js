@@ -1,10 +1,16 @@
 // Moteur de jeu BlindYourFriends : la machine à états d'une partie.
 // Tourne chez l'hôte (navigateur ou lanceur) et dans Node pour les tests.
 // Aucune dépendance au transport : on lui passe des messages, il renvoie des états.
+//
+// Modes (voir catalog.js) :
+// - byf / byf-theme : chacun choisit des sons (pick), puis on devine qui a mis quoi (guess,
+//   deliberate, reveal). En byf-theme, un thème est imposé et on peut signaler un son hors thème.
+// - classic / progressive : le jeu choisit les sons, on tape le titre et l'artiste (guess, reveal).
+//   En progressive, l'extrait s'allonge par étapes et les points baissent à chaque étape.
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory();
-  else root.BYFGame = factory();
-})(typeof self !== 'undefined' ? self : this, function () {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./catalog.js'));
+  else root.BYFGame = factory(root.BYFCatalog);
+})(typeof self !== 'undefined' ? self : this, function (Catalog) {
   'use strict';
 
   const DEFAULTS = {
@@ -15,12 +21,25 @@
     songsMin: 1,
     songsMax: 5,
     songsDefault: 2,
+    songCountMin: 5, // blind test : nombre de sons par manche
+    songCountMax: 20,
+    songCountDefault: 10,
     minPlayers: 2,
     maxPlayers: 12,
     pointsGoodGuess: 100,
     pointsPerFooled: 50,
+    offThemePenalty: 100,
+    quizTitlePoints: 100,
+    quizArtistPoints: 100,
+    quizFirstBonus: 50, // au premier qui trouve le titre (ou l'artiste)
+    progressiveClips: [1, 2, 4, 8, 16, 30], // secondes d'extrait à chaque étape
+    progressivePoints: [1000, 800, 600, 400, 250, 100], // moitié titre, moitié artiste
+    stageGap: 5, // secondes pour répondre après chaque extrait
   };
   const NAME_MAX = 20;
+  const THEME_MAX = 40;
+  const ANSWER_MAX = 100;
+  const ANSWER_COOLDOWN = 300; // ms entre deux réponses d'un même joueur
   const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // sans I ni O
 
   function randomInt(n) {
@@ -39,13 +58,15 @@
     return code;
   }
 
-  function cleanName(raw) {
+  function cleanText(raw, max) {
     return String(raw || '')
       .replace(/[\u0000-\u001f\u007f]/g, '')
       .replace(/\s+/g, ' ')
       .trim()
-      .slice(0, NAME_MAX);
+      .slice(0, max);
   }
+
+  const cleanName = (raw) => cleanText(raw, NAME_MAX);
 
   function shuffle(arr) {
     for (let i = arr.length - 1; i > 0; i--) {
@@ -65,10 +86,11 @@
    * - code : code à 4 lettres
    * - config : durées et bornes (voir DEFAULTS)
    * - resolveTrack(id) : Promise<track|null>, résolution d'un id Deezer par l'hôte
+   * - loadTracks(sourceId) : Promise<track[]>, sons d'une source du blind test (catalog.SOURCES)
    * - send(playerId, state) : envoie l'état personnalisé d'un joueur
    * Les ids de joueur sont ceux des connexions, fournis par le transport.
    */
-  function createRoom({ code, config, resolveTrack, send }) {
+  function createRoom({ code, config, resolveTrack, loadTracks, send }) {
     const cfg = Object.assign({}, DEFAULTS, config || {});
     const PICK_MS = cfg.pickTime * 1000;
     const GUESS_MS = cfg.guessTime * 1000;
@@ -79,18 +101,33 @@
     const room = {
       code,
       hostId: null,
-      players: new Map(), // id -> { id, name, token, score, active }
-      settings: { songsPerPlayer: cfg.songsDefault },
+      players: new Map(), // id -> { id, name, token, score, active, lastAnswer }
+      settings: {
+        mode: Catalog.DEFAULT_MODE,
+        songsPerPlayer: cfg.songsDefault,
+        theme: 'random', // id de catalog.THEMES, 'random' ou 'custom'
+        customTheme: '',
+        source: Catalog.DEFAULT_SOURCE,
+        songCount: cfg.songCountDefault,
+      },
+      mode: Catalog.DEFAULT_MODE, // mode de la manche en cours
+      theme: null, // thème de la manche en cours (texte)
       phase: 'lobby',
       round: 0,
       endsAt: 0,
       phaseMs: 0,
       timer: null,
+      starting: false,
       picks: new Map(), // playerId -> track[]
-      sounds: [], // [{ ownerId, track }] dans l'ordre de passage
+      sounds: [], // [{ ownerId, track }] dans l'ordre de passage (ownerId null en blind test)
       idx: -1,
       current: null, // sounds[idx]
       votes: new Map(), // voterId -> targetId
+      offTheme: new Set(), // joueurs qui jugent le son hors thème
+      answers: new Map(), // playerId -> { title: points|null, artist: points|null } (blind test)
+      firsts: { title: null, artist: null }, // premier à trouver, pour le bonus
+      stage: 0, // étape du blind test progressif
+      played: new Set(), // sons déjà joués en blind test, pour ne pas les répéter
       reveal: null,
       pastScores: new Map(), // pseudo (minuscule) -> score, pour qui revient après une déconnexion
       destroyed: false,
@@ -109,8 +146,9 @@
       }
     }
 
+    const isQuiz = () => Catalog.isQuiz(room.mode);
     const inGame = () => ['pick', 'guess', 'deliberate', 'reveal'].includes(room.phase);
-    const isVoting = () => room.phase === 'guess' || room.phase === 'deliberate';
+    const isVoting = () => !isQuiz() && (room.phase === 'guess' || room.phase === 'deliberate');
     const activePlayers = () => [...room.players.values()].filter((p) => p.active);
     const voters = () => activePlayers().filter((p) => p.id !== room.current.ownerId);
     // Joueurs pour qui on peut voter : ceux qui ont au moins un son dans la manche.
@@ -118,19 +156,49 @@
     // Les votants qui se sont prononcés ne désignent pas tous la même personne.
     const disagree = () => new Set(room.votes.values()).size > 1;
     const allVoted = () => voters().every((p) => room.votes.has(p.id));
+    const answerOf = (pid) => room.answers.get(pid) || { title: null, artist: null };
+    const foundAll = (pid) => {
+      const a = answerOf(pid);
+      return a.title !== null && a.artist !== null;
+    };
 
-    function startRound() {
+    // ------------------------------------------------------------ déroulement
+
+    function resetRound() {
       room.round++;
+      room.mode = room.settings.mode;
+      room.theme = null;
       room.picks.clear();
       room.sounds = [];
       room.idx = -1;
       room.current = null;
       room.votes.clear();
+      room.offTheme.clear();
       room.reveal = null;
       for (const p of room.players.values()) p.active = true;
+    }
+
+    function resolveTheme() {
+      const s = room.settings;
+      if (s.theme === 'custom' && s.customTheme) return s.customTheme;
+      const fixed = Catalog.theme(s.theme);
+      if (fixed) return fixed.label;
+      return Catalog.THEMES[randomInt(Catalog.THEMES.length)].label;
+    }
+
+    function startPickRound() {
+      resetRound();
+      if (room.mode === 'byf-theme') room.theme = resolveTheme();
       room.phase = 'pick';
       schedule(PICK_MS * room.settings.songsPerPlayer, endPick);
       broadcast();
+    }
+
+    function startQuizRound(tracks) {
+      resetRound();
+      room.sounds = tracks.map((track) => ({ ownerId: null, track }));
+      tracks.forEach((t) => room.played.add(t.id));
+      nextSound();
     }
 
     function endPick() {
@@ -145,14 +213,27 @@
 
     function nextSound() {
       room.votes.clear();
+      room.offTheme.clear();
+      room.answers.clear();
+      room.firsts = { title: null, artist: null };
       room.reveal = null;
       room.idx++;
-      while (room.idx < room.sounds.length && !room.players.has(room.sounds[room.idx].ownerId)) room.idx++;
+      // En blind test, les sons n'ont pas de propriétaire ; sinon on saute ceux des joueurs partis.
+      while (room.idx < room.sounds.length && !isQuiz() && !room.players.has(room.sounds[room.idx].ownerId)) room.idx++;
       if (room.idx >= room.sounds.length) return endGame();
 
       room.current = room.sounds[room.idx];
       room.phase = 'guess';
-      schedule(GUESS_MS, endListen);
+      if (room.mode === 'progressive') return startStage(0);
+      schedule(GUESS_MS, isQuiz() ? revealQuiz : endListen);
+      broadcast();
+    }
+
+    // Blind test progressif : à chaque étape, un extrait plus long puis un temps pour répondre.
+    function startStage(k) {
+      room.stage = k;
+      const last = k >= cfg.progressiveClips.length - 1;
+      schedule((cfg.progressiveClips[k] + cfg.stageGap) * 1000, () => (last ? revealQuiz() : startStage(k + 1)));
       broadcast();
     }
 
@@ -171,26 +252,54 @@
       const gains = {};
       const votes = [];
       let fooled = 0;
+      const add = (pid, pts) => {
+        const p = room.players.get(pid);
+        if (!p || !pts) return;
+        p.score += pts;
+        gains[pid] = (gains[pid] || 0) + pts;
+      };
 
       for (const [voterId, targetId] of room.votes) {
         const voter = room.players.get(voterId);
         if (!voter) continue;
         const correct = targetId === ownerId;
-        if (correct) {
-          voter.score += cfg.pointsGoodGuess;
-          gains[voterId] = cfg.pointsGoodGuess;
-        } else {
-          fooled++;
-        }
+        if (correct) add(voterId, cfg.pointsGoodGuess);
+        else fooled++;
         const target = room.players.get(targetId);
         votes.push({ voterId, voterName: voter.name, targetId, targetName: target ? target.name : '?', correct });
       }
-      if (owner && fooled) {
-        owner.score += fooled * cfg.pointsPerFooled;
-        gains[ownerId] = fooled * cfg.pointsPerFooled;
+      add(ownerId, fooled * cfg.pointsPerFooled);
+
+      // Thème imposé : si la majorité des autres joueurs juge le son hors thème, pénalité.
+      let offTheme = null;
+      if (room.mode === 'byf-theme') {
+        const total = voters().length;
+        const count = [...room.offTheme].filter((id) => room.players.has(id) && id !== ownerId).length;
+        const penalized = total > 0 && count * 2 > total;
+        if (penalized) add(ownerId, -cfg.offThemePenalty);
+        offTheme = { count, total, penalized, penalty: penalized ? cfg.offThemePenalty : 0 };
       }
 
-      room.reveal = { ownerId, ownerName: owner ? owner.name : '?', track: publicTrack(track), votes, gains };
+      room.reveal = { kind: 'byf', ownerId, ownerName: owner ? owner.name : '?', track: publicTrack(track), votes, gains, offTheme };
+      room.phase = 'reveal';
+      schedule(REVEAL_MS, nextSound);
+      broadcast();
+    }
+
+    function revealQuiz() {
+      const gains = {};
+      const results = [];
+      for (const p of activePlayers()) {
+        const a = answerOf(p.id);
+        const pts = (a.title || 0) + (a.artist || 0);
+        if (pts) {
+          p.score += pts;
+          gains[p.id] = pts;
+        }
+        results.push({ id: p.id, name: p.name, title: a.title, artist: a.artist });
+      }
+      results.sort((x, y) => (gains[y.id] || 0) - (gains[x.id] || 0));
+      room.reveal = { kind: 'quiz', track: publicTrack(room.current.track), results, gains };
       room.phase = 'reveal';
       schedule(REVEAL_MS, nextSound);
       broadcast();
@@ -200,11 +309,12 @@
       room.phase = 'end';
       room.current = null;
       room.votes.clear();
+      room.answers.clear();
       schedule(0);
       broadcast();
     }
 
-    // Relance la vérif "tout le monde a joué" (après un pick, un vote ou un départ).
+    // Relance la vérif "tout le monde a joué" (après un pick, un vote, une réponse ou un départ).
     function checkProgress() {
       if (inGame() && room.players.size < cfg.minPlayers) return endGame();
 
@@ -216,17 +326,25 @@
       } else if (isVoting()) {
         if (!room.players.has(room.current.ownerId)) return nextSound(); // le proprio est parti : on saute
         if (allVoted()) return doReveal(); // plus aucun vote ne peut changer
+      } else if (isQuiz() && room.phase === 'guess') {
+        const active = activePlayers();
+        if (active.length && active.every((p) => foundAll(p.id))) return revealQuiz();
       }
       broadcast();
     }
 
-    // État personnalisé : chaque joueur ne voit que ses propres picks.
+    // ------------------------------------------------------------ état envoyé aux joueurs
+
+    // État personnalisé : chaque joueur ne voit que ses propres picks, et jamais la réponse
+    // d'un blind test avant le reveal.
     function stateFor(pid) {
       const me = room.players.get(pid);
       const s = {
         code: room.code,
         phase: room.phase,
         round: room.round,
+        mode: inGame() ? room.mode : room.settings.mode,
+        theme: inGame() ? room.theme : null,
         now: Date.now(),
         endsAt: room.endsAt,
         duration: room.phaseMs,
@@ -253,6 +371,7 @@
         s.isMine = isMine;
         s.canVote = !!(me && me.active) && !isMine;
         s.myVote = room.votes.get(pid) || null;
+        s.myOffTheme = room.offTheme.has(pid);
         s.candidates = candidates()
           .filter((id) => id !== pid)
           .map((id) => ({ id, name: room.players.get(id).name }));
@@ -264,6 +383,24 @@
             .map((id) => ({ id, name: room.players.get(id).name, count: tally[id] || 0 }))
             .filter((t) => t.count > 0)
             .sort((a, b) => b.count - a.count);
+        }
+      }
+      if (isQuiz() && room.phase === 'guess') {
+        // Seulement l'extrait : ni titre, ni artiste, ni pochette.
+        s.sound = { index: room.idx + 1, total: room.sounds.length, track: { preview: room.current.track.preview } };
+        s.canAnswer = !!(me && me.active);
+        s.found = answerOf(pid);
+        s.progress = activePlayers().map((p) => {
+          const a = answerOf(p.id);
+          return { id: p.id, name: p.name, title: a.title !== null, artist: a.artist !== null };
+        });
+        if (room.mode === 'progressive') {
+          s.stage = {
+            index: room.stage,
+            count: cfg.progressiveClips.length,
+            clip: cfg.progressiveClips[room.stage],
+            points: cfg.progressivePoints[room.stage],
+          };
         }
       }
       if (room.phase === 'reveal') {
@@ -282,8 +419,9 @@
       const player = room.players.get(pid);
       if (!player) return;
       room.players.delete(pid);
-      if (player.score > 0) room.pastScores.set(player.name.toLowerCase(), player.score);
+      if (player.score !== 0) room.pastScores.set(player.name.toLowerCase(), player.score);
       room.votes.delete(pid);
+      room.offTheme.delete(pid);
       if (room.phase === 'pick') room.picks.delete(pid);
 
       if (room.players.size === 0) {
@@ -320,6 +458,7 @@
         score: room.pastScores.get(lower) || 0,
         // Un joueur qui arrive pendant la phase pick peut encore jouer la manche.
         active: room.phase === 'pick',
+        lastAnswer: 0,
       });
       room.pastScores.delete(lower);
       if (!room.hostId) room.hostId = pid;
@@ -331,26 +470,77 @@
       if (!room.players.has(pid)) return { error: 'Pas de partie.' };
       if (room.hostId !== pid) return { error: "Seul l'hôte peut faire ça." };
       if (room.phase !== 'lobby' && room.phase !== 'end') return { error: 'Manche déjà en cours.' };
+      if (room.starting) return { error: 'Lancement en cours.' };
       return null;
     }
 
+    const intIn = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
+
+    // Réglages envoyés un par un ou ensemble : chaque champ présent est vérifié puis appliqué.
     function onSettings(pid, payload) {
       const err = hostCheck(pid);
       if (err) return err;
-      const n = Number(payload && payload.songsPerPlayer);
-      if (!Number.isInteger(n) || n < cfg.songsMin || n > cfg.songsMax) {
-        return { error: `Entre ${cfg.songsMin} et ${cfg.songsMax} sons par joueur.` };
+      const p = payload || {};
+      const next = Object.assign({}, room.settings);
+
+      if ('mode' in p) {
+        if (!Catalog.mode(p.mode)) return { error: 'Mode de jeu inconnu.' };
+        next.mode = p.mode;
       }
-      room.settings.songsPerPlayer = n;
+      if ('songsPerPlayer' in p) {
+        const n = Number(p.songsPerPlayer);
+        if (!intIn(n, cfg.songsMin, cfg.songsMax)) return { error: `Entre ${cfg.songsMin} et ${cfg.songsMax} sons par joueur.` };
+        next.songsPerPlayer = n;
+      }
+      if ('theme' in p) {
+        if (p.theme !== 'random' && p.theme !== 'custom' && !Catalog.theme(p.theme)) return { error: 'Thème inconnu.' };
+        next.theme = p.theme;
+      }
+      if ('customTheme' in p) next.customTheme = cleanText(p.customTheme, THEME_MAX);
+      if ('source' in p) {
+        if (!Catalog.source(p.source)) return { error: 'Style de musique inconnu.' };
+        next.source = p.source;
+      }
+      if ('songCount' in p) {
+        const n = Number(p.songCount);
+        if (!intIn(n, cfg.songCountMin, cfg.songCountMax)) return { error: `Entre ${cfg.songCountMin} et ${cfg.songCountMax} sons.` };
+        next.songCount = n;
+      }
+
+      room.settings = next;
       broadcast();
       return { ok: true };
     }
 
-    function onStart(pid) {
+    async function onStart(pid) {
       const err = hostCheck(pid);
       if (err) return err;
       if (room.players.size < cfg.minPlayers) return { error: `Il faut au moins ${cfg.minPlayers} joueurs.` };
-      startRound();
+      const s = room.settings;
+      if (s.mode === 'byf-theme' && s.theme === 'custom' && !s.customTheme) return { error: 'Écris le thème de la manche.' };
+      if (!Catalog.isQuiz(s.mode)) {
+        startPickRound();
+        return { ok: true };
+      }
+
+      // Blind test : l'hôte récupère les sons avant de lancer.
+      room.starting = true;
+      let tracks = [];
+      try {
+        tracks = (await loadTracks(s.source)) || [];
+      } catch (e) {
+        console.warn('[start]', e && e.message);
+      } finally {
+        room.starting = false;
+      }
+      if (room.destroyed) return { error: 'Partie terminée.' };
+      if (room.players.size < cfg.minPlayers) return { error: `Il faut au moins ${cfg.minPlayers} joueurs.` };
+      const seen = new Set();
+      let pool = tracks.filter((t) => t && t.preview && !seen.has(t.id) && seen.add(t.id));
+      const fresh = pool.filter((t) => !room.played.has(t.id));
+      if (fresh.length >= s.songCount) pool = fresh; // on évite de rejouer les mêmes sons
+      if (pool.length < cfg.songCountMin) return { error: 'Pas assez de sons dans ce style, essaie-en un autre.' };
+      startQuizRound(shuffle(pool).slice(0, s.songCount));
       return { ok: true };
     }
 
@@ -401,6 +591,51 @@
       return { ok: true };
     }
 
+    // Thème imposé : signaler (ou retirer son signalement) qu'un son est hors thème.
+    function onOffTheme(pid, payload) {
+      const me = room.players.get(pid);
+      if (!me || !isVoting() || room.mode !== 'byf-theme') return { error: 'Pas de thème en cours.' };
+      if (!me.active || room.current.ownerId === pid) return { error: 'Tu ne peux pas juger ce son.' };
+      if (payload && payload.flag) room.offTheme.add(pid);
+      else room.offTheme.delete(pid);
+      broadcast();
+      return { ok: true };
+    }
+
+    // Blind test : une réponse tapée, comparée au titre et à l'artiste.
+    function onAnswer(pid, payload) {
+      const me = room.players.get(pid);
+      if (!me || !isQuiz() || room.phase !== 'guess') return { error: 'Pas de son à deviner.' };
+      if (!me.active) return { error: 'Tu joues à la prochaine manche.' };
+      const now = Date.now();
+      if (now - me.lastAnswer < ANSWER_COOLDOWN) return { error: 'Doucement !' };
+      me.lastAnswer = now;
+
+      const text = cleanText(payload && payload.text, ANSWER_MAX);
+      const match = Catalog.matchAnswer(text, room.current.track);
+      const a = Object.assign({}, answerOf(pid));
+      const gained = {};
+      for (const part of ['title', 'artist']) {
+        if (!match[part] || a[part] !== null) continue;
+        let pts;
+        if (room.mode === 'progressive') {
+          pts = Math.round(cfg.progressivePoints[room.stage] / 2);
+        } else {
+          pts = part === 'title' ? cfg.quizTitlePoints : cfg.quizArtistPoints;
+          if (!room.firsts[part]) {
+            room.firsts[part] = pid;
+            pts += cfg.quizFirstBonus;
+          }
+        }
+        a[part] = pts;
+        gained[part] = pts;
+      }
+      room.answers.set(pid, a);
+      const found = Object.keys(gained).length > 0;
+      if (found) checkProgress();
+      return { ok: true, found, gained, title: a.title !== null, artist: a.artist !== null };
+    }
+
     const handlers = {
       join: onJoin,
       settings: onSettings,
@@ -408,6 +643,8 @@
       pick: onPick,
       unpick: onUnpick,
       vote: onVote,
+      offtheme: onOffTheme,
+      answer: onAnswer,
       leave: (pid) => {
         removePlayer(pid);
         return { ok: true };

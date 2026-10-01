@@ -11,7 +11,7 @@
   const DEAD_AFTER = 15000; // sans nouvelles depuis 15 s : connexion considérée perdue
   const ACK_TIMEOUT = 15000;
   const RECONNECT_FOR = 30000;
-  const EVENTS = new Set(['join', 'settings', 'start', 'pick', 'unpick', 'vote', 'leave']);
+  const EVENTS = new Set(['join', 'settings', 'start', 'pick', 'unpick', 'vote', 'offtheme', 'answer', 'leave']);
 
   class Emitter {
     constructor() { this.handlers = {}; }
@@ -80,6 +80,7 @@
       code,
       config: cfg.times,
       resolveTrack: BYFDeezer.resolveTrack,
+      loadTracks: BYFDeezer.loadTracks,
       send(pid, state) {
         if (pid === LOCAL_ID) return local.fire('state', state);
         const c = conns.get(pid);

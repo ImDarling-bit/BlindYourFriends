@@ -2,6 +2,7 @@
   'use strict';
 
   const $ = (id) => document.getElementById(id);
+  const Catalog = window.BYFCatalog;
 
   const NAME_KEY = 'blindyourfriends.name';
   const VOLUME_KEY = 'blindyourfriends.volume';
@@ -100,7 +101,9 @@
   const previewAudio = new Audio();
   previewAudio.preload = 'none';
 
-  let gameKey = null; // "manche:index" du son en cours
+  let gameKey = null; // "manche:index:étape" du son en cours
+  let clipTimer = null; // blind test progressif : coupe l'extrait à la fin de l'étape
+  let clipLength = 0; // durée de l'extrait de l'étape en cours (0 : pas de coupure)
   let previewId = null;
   let audioUnlocked = false;
 
@@ -121,12 +124,19 @@
 
   function stopGame() {
     gameKey = null;
+    clipLength = 0;
+    clearTimeout(clipTimer);
     gameAudio.pause();
     $('unlockBtn').classList.add('hidden');
   }
 
   gameAudio.addEventListener('play', () => $('guessVinyl').classList.add('playing'));
   gameAudio.addEventListener('pause', () => $('guessVinyl').classList.remove('playing'));
+  // Le chrono de l'extrait part quand le son démarre vraiment (après le chargement).
+  gameAudio.addEventListener('playing', () => {
+    clearTimeout(clipTimer);
+    if (clipLength) clipTimer = setTimeout(() => gameAudio.pause(), clipLength * 1000);
+  });
 
   $('unlockBtn').addEventListener('click', () => {
     audioUnlocked = true;
@@ -137,11 +147,19 @@
     const playing = S && ['guess', 'deliberate', 'reveal'].includes(S.phase);
     const sound = playing ? S.sound : null;
     if (!sound || !sound.track) return stopGame();
-    const key = `${S.round}:${sound.index}`;
+    // Blind test progressif : chaque étape rejoue le début de l'extrait, de plus en plus long ;
+    // au reveal, on réécoute le son en entier.
+    const staged = S.phase === 'guess' && S.stage;
+    const step = staged ? S.stage.index : S.mode === 'progressive' && S.phase === 'reveal' ? 'fin' : '';
+    const key = `${S.round}:${sound.index}:${step}`;
     if (key === gameKey) return;
+    const sameSound = gameKey && gameKey.startsWith(`${S.round}:${sound.index}:`);
     gameKey = key;
+    clearTimeout(clipTimer);
     stopPreview();
-    gameAudio.src = sound.track.preview;
+    if (!sameSound) gameAudio.src = sound.track.preview;
+    gameAudio.loop = !staged;
+    clipLength = staged ? S.stage.clip : 0;
     gameAudio.currentTime = 0;
     playGame();
   }
@@ -195,19 +213,41 @@
   // ---------------------------------------------------------------- règles
 
   function renderRules() {
-    const c = config || { pickTime: 30, guessTime: 30, deliberateTime: 30, revealTime: 7, songsMin: 1, songsMax: 5, minPlayers: 2, maxPlayers: 12, pointsGoodGuess: 100, pointsPerFooled: 50 };
+    const c = config;
+    const mode = (S && S.settings.mode) || Catalog.DEFAULT_MODE;
     const n = songsPerPlayer();
     const songs = n
       ? `<strong>${plural(n, 'son')}</strong> (réglé par l'hôte)`
       : `entre <strong>${c.songsMin} et ${c.songsMax} sons</strong>, selon le réglage de l'hôte`;
-    $('rulesList').innerHTML = `
-      <li>Un joueur crée la partie et partage le code à 4 lettres. De <strong>${c.minPlayers} à ${c.maxPlayers} joueurs</strong>.</li>
-      <li><strong>Préparation</strong> : chacun choisit en secret ${songs}, avec ${c.pickTime} s par son. Les autres voient ton avancement, jamais tes choix.</li>
-      <li><strong>Écoute</strong> : tous les sons passent un par un, dans le désordre, <strong>${c.guessTime} s</strong> chacun. Vote pour la personne qui l'a mis : <strong>ton premier choix est définitif</strong>.</li>
-      <li>Si c'est ton son, tu ne votes pas : fais genre.</li>
-      <li><strong>Délibération</strong> : si les premiers votes ne désignent pas tous la même personne et que certains n'ont pas encore voté, ils ont <strong>${c.deliberateTime} s de plus</strong> pour écouter le débat avant de se décider.</li>
-      <li><strong>Points</strong> : +${c.pointsGoodGuess} par bonne réponse. Le propriétaire du son gagne +${c.pointsPerFooled} par joueur qui s'est trompé.</li>
-      <li>L'hôte peut relancer une manche à la fin : les scores se cumulent.</li>`;
+    const items = [
+      `Un joueur crée la partie et partage le code à 4 lettres. De <strong>${c.minPlayers} à ${c.maxPlayers} joueurs</strong>. L'hôte choisit le mode de jeu : <strong>${esc(Catalog.mode(mode).label)}</strong> pour l'instant.`,
+    ];
+    if (Catalog.isQuiz(mode)) {
+      const source = S ? Catalog.source(S.settings.source) : null;
+      items.push(`Le jeu choisit <strong>${S ? plural(S.settings.songCount, 'son') : 'les sons'}</strong>${source ? ` dans le style <strong>${esc(source.label)}</strong>` : ''}. Tout le monde écoute le même extrait.`);
+      items.push('Tape le <strong>titre</strong> ou l\'<strong>artiste</strong> et valide. Les accents, majuscules et petites fautes de frappe sont tolérés ; tu peux aussi taper les deux d\'un coup. Tu peux réessayer autant que tu veux.');
+      if (mode === 'progressive') {
+        const steps = c.progressiveClips.map((clip, i) => `${clip} s : ${c.progressivePoints[i]}`).join(', ');
+        items.push(`L'extrait s'allonge à chaque étape, avec ${c.stageGap} s pour répondre après chacune. Plus tu trouves tôt, plus ça rapporte : ${steps} points (moitié pour le titre, moitié pour l'artiste).`);
+      } else {
+        items.push(`Chaque son dure <strong>${c.guessTime} s</strong>. +${c.quizTitlePoints} pour le titre, +${c.quizArtistPoints} pour l'artiste, et +${c.quizFirstBonus} au premier qui trouve chacun des deux.`);
+      }
+      items.push('Dès que tout le monde a tout trouvé, on passe au son suivant.');
+    } else {
+      if (mode === 'byf-theme') {
+        items.push(`Un <strong>thème</strong> est imposé (choisi par l'hôte ou au hasard) : tes sons doivent coller au thème.`);
+      }
+      items.push(`<strong>Préparation</strong> : chacun choisit en secret ${songs}, avec ${c.pickTime} s par son. Les autres voient ton avancement, jamais tes choix.`);
+      items.push(`<strong>Écoute</strong> : tous les sons passent un par un, dans le désordre, <strong>${c.guessTime} s</strong> chacun. Vote pour la personne qui l'a mis : <strong>ton premier choix est définitif</strong>. Si c'est ton son, tu ne votes pas : fais genre.`);
+      if (mode === 'byf-theme') {
+        items.push(`Si un son ne colle pas au thème, appuie sur <strong>Hors thème</strong>. Si la majorité des autres joueurs le signale, son propriétaire perd ${c.offThemePenalty} points.`);
+      }
+      items.push(`<strong>Délibération</strong> : si les premiers votes ne désignent pas tous la même personne et que certains n'ont pas encore voté, ils ont <strong>${c.deliberateTime} s de plus</strong> pour écouter le débat avant de se décider.`);
+      items.push(`<strong>Points</strong> : +${c.pointsGoodGuess} par bonne réponse. Le propriétaire du son gagne +${c.pointsPerFooled} par joueur qui s'est trompé.`);
+    }
+    items.push("L'hôte peut relancer une manche à la fin, dans le même mode ou un autre : les scores se cumulent.");
+    $('rulesList').innerHTML = items.map((i) => `<li>${i}</li>`).join('');
+    $('rulesModes').innerHTML = Catalog.MODES.map((m) => `<li><strong>${esc(m.label)}</strong> : ${esc(m.short)}</li>`).join('');
   }
 
   function openRules() {
@@ -257,6 +297,11 @@
     else if (S.phase === 'reveal') renderReveal();
     else if (S.phase === 'end') renderEnd();
 
+    // Thème imposé, affiché pendant la préparation et l'écoute.
+    document.querySelectorAll('[data-theme-banner]').forEach((el) => {
+      el.classList.toggle('hidden', !S.theme);
+      el.innerHTML = S.theme ? `<span>Thème</span><strong>${esc(S.theme)}</strong>` : '';
+    });
     if (!$('rulesModal').classList.contains('hidden')) renderRules();
     document.querySelectorAll('[data-action="leave"]').forEach((b) => {
       b.textContent = net && net.isHost ? 'Fermer la partie (pour tout le monde)' : 'Quitter la partie';
@@ -271,32 +316,96 @@
     return `<li>${avatar(p.name)}<span class="player-name">${esc(p.name)}</span>${tags.join('')}</li>`;
   }
 
-  // Bloc "sons par joueur" : modifiable par l'hôte, en lecture seule pour les autres.
-  function renderSettings() {
-    const n = S.settings.songsPerPlayer;
-    const c = S.config;
-    const control = isHost()
-      ? `<div class="stepper">
-          <button class="icon-btn icon-btn-small" data-songs="${n - 1}" aria-label="Moins de sons" ${n <= c.songsMin ? 'disabled' : ''}>-</button>
-          <output aria-live="polite">${n}</output>
-          <button class="icon-btn icon-btn-small" data-songs="${n + 1}" aria-label="Plus de sons" ${n >= c.songsMax ? 'disabled' : ''}>+</button>
-        </div>`
-      : `<div class="stepper"><output>${n}</output></div>`;
-    const html = `<div class="settings-row">
-        <div>
-          <h2>Sons par joueur</h2>
-          <p class="muted">${n * c.pickTime} s pour les choisir${isHost() ? '' : " · réglé par l'hôte"}</p>
-        </div>
+  function stepper(field, value, min, max, label) {
+    if (!isHost()) return `<div class="stepper"><output>${value}</output></div>`;
+    return `<div class="stepper">
+        <button class="icon-btn icon-btn-small" data-field="${field}" data-value="${value - 1}" aria-label="${label} : moins" ${value <= min ? 'disabled' : ''}>-</button>
+        <output aria-live="polite">${value}</output>
+        <button class="icon-btn icon-btn-small" data-field="${field}" data-value="${value + 1}" aria-label="${label} : plus" ${value >= max ? 'disabled' : ''}>+</button>
+      </div>`;
+  }
+
+  function select(field, value, options, label) {
+    if (!isHost()) {
+      const current = options.find((o) => o.id === value);
+      return `<strong class="setting-value">${esc(current ? current.label : '')}</strong>`;
+    }
+    return `<select class="input select" data-select="${field}" aria-label="${label}">
+        ${options.map((o) => `<option value="${esc(o.id)}"${o.id === value ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}
+      </select>`;
+  }
+
+  function settingRow(title, hint, control) {
+    return `<div class="settings-row">
+        <div><h2>${title}</h2>${hint ? `<p class="muted">${hint}</p>` : ''}</div>
         ${control}
       </div>`;
-    document.querySelectorAll('[data-settings]').forEach((el) => { el.innerHTML = html; });
   }
+
+  // Réglages de la partie (mode de jeu et options du mode) : modifiables par l'hôte,
+  // en lecture seule pour les autres.
+  function settingsHtml() {
+    const st = S.settings;
+    const c = S.config;
+    const host = isHost();
+    const modes = host ? Catalog.MODES : [Catalog.mode(st.mode)];
+    let html = `<h2>Mode de jeu</h2>
+      <div class="modes">
+        ${modes.map((m) => `<button class="mode-card${m.id === st.mode ? ' selected' : ''}" data-mode="${m.id}" ${host ? '' : 'disabled'}>
+            <strong>${esc(m.label)}</strong><span>${esc(m.short)}</span>
+          </button>`).join('')}
+      </div>`;
+
+    if (Catalog.isQuiz(st.mode)) {
+      html += settingRow('Style de musique', host ? '' : "Choisi par l'hôte", select('source', st.source, Catalog.SOURCES, 'Style de musique'));
+      html += settingRow('Nombre de sons', '', stepper('songCount', st.songCount, c.songCountMin, c.songCountMax, 'Nombre de sons'));
+    } else {
+      if (st.mode === 'byf-theme') {
+        const themes = [{ id: 'random', label: 'Au hasard' }].concat(Catalog.THEMES, [{ id: 'custom', label: 'Thème libre...' }]);
+        let control = select('theme', st.theme, themes, 'Thème');
+        if (!host && st.theme === 'custom') control = `<strong class="setting-value">${esc(st.customTheme || 'Thème libre')}</strong>`;
+        html += settingRow('Thème', st.theme === 'random' ? 'Tiré au sort au lancement' : '', control);
+        if (host && st.theme === 'custom') {
+          html += `<input class="input" data-custom-theme maxlength="40" placeholder="Ex. : chanson de mariage" value="${esc(st.customTheme)}" aria-label="Thème libre">`;
+        }
+      }
+      html += settingRow('Sons par joueur', `${st.songsPerPlayer * c.pickTime} s pour les choisir`,
+        stepper('songsPerPlayer', st.songsPerPlayer, c.songsMin, c.songsMax, 'Sons par joueur'));
+    }
+    return html;
+  }
+
+  function renderSettings() {
+    const html = settingsHtml();
+    document.querySelectorAll('[data-settings]').forEach((el) => {
+      // Ne pas reconstruire pendant que l'hôte écrit ou choisit dans une liste.
+      if (el.contains(document.activeElement) && document.activeElement.matches('input, select')) return;
+      if (el.dataset.html !== html) {
+        el.innerHTML = html;
+        el.dataset.html = html;
+      }
+    });
+  }
+
+  const sendSetting = (patch) => send('settings', patch, toastError);
 
   document.querySelectorAll('[data-settings]').forEach((el) => {
     el.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-songs]');
-      if (!btn || btn.disabled) return;
-      send('settings', { songsPerPlayer: Number(btn.dataset.songs) }, toastError);
+      const mode = e.target.closest('[data-mode]');
+      if (mode && !mode.disabled) return sendSetting({ mode: mode.dataset.mode });
+      const btn = e.target.closest('[data-field]');
+      if (btn && !btn.disabled) sendSetting({ [btn.dataset.field]: Number(btn.dataset.value) });
+    });
+    el.addEventListener('change', (e) => {
+      const sel = e.target.closest('[data-select]');
+      if (sel) {
+        sel.blur();
+        return sendSetting({ [sel.dataset.select]: sel.value });
+      }
+      if (e.target.matches('[data-custom-theme]')) sendSetting({ customTheme: e.target.value });
+    });
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.target.matches('[data-custom-theme]')) e.target.blur();
     });
   });
 
@@ -312,7 +421,7 @@
     $('startBtn').disabled = !enough;
     $('lobbyHint').textContent = isHost()
       ? (enough ? 'Tout le monde est là ? Lance quand tu veux.' : `Il faut au moins ${S.config.minPlayers} joueurs. Partage le code.`)
-      : "En attente de l'hôte.";
+      : `Mode : ${Catalog.mode(S.settings.mode).label}. En attente de l'hôte.`;
   }
 
   function renderPick() {
@@ -343,13 +452,19 @@
 
   function renderGuess() {
     const { track, index, total } = S.sound;
+    const quiz = Catalog.isQuiz(S.mode);
     const deliberating = S.phase === 'deliberate';
     $('guessCounter').textContent = `Son ${index} / ${total}${deliberating ? ' · délibération' : ''}`;
+
+    // En blind test, ni pochette ni titre avant le reveal.
     const cover = $('guessCover');
-    const coverUrl = /^https:\/\//.test(track.coverBig) ? track.coverBig : '';
+    const coverUrl = !quiz && /^https:\/\//.test(track.coverBig) ? track.coverBig : '';
     if (cover.getAttribute('src') !== coverUrl) cover.setAttribute('src', coverUrl);
-    $('guessTitle').textContent = track.title;
-    $('guessArtist').textContent = track.artist;
+    cover.classList.toggle('hidden', quiz);
+    $('guessMystery').classList.toggle('hidden', !quiz);
+    $('guessVinyl').classList.toggle('mystery', quiz);
+    $('guessTitle').textContent = quiz ? 'Quel est ce son ?' : track.title;
+    $('guessArtist').textContent = quiz ? '' : track.artist;
 
     $('deliberateBanner').classList.toggle('hidden', !deliberating);
     if (deliberating) {
@@ -359,6 +474,10 @@
           <span class="bar"><i style="width:${Math.round((t.count / max) * 100)}%"></i></span>
         </li>`).join('');
     }
+
+    renderStages();
+    if (quiz) return renderAnswer();
+    $('answerForm').classList.add('hidden');
 
     let body;
     if (S.isMine) {
@@ -373,15 +492,94 @@
           <button class="vote-btn${S.myVote === c.id ? ' selected' : ''}" data-vote="${esc(c.id)}" ${locked ? 'disabled' : ''}>
             ${avatar(c.name)}<span>${esc(c.name)}</span>
           </button>`).join('') + '</div>';
+      if (S.mode === 'byf-theme') {
+        body += `<button class="btn btn-ghost offtheme-btn${S.myOffTheme ? ' active' : ''}" data-offtheme="${S.myOffTheme ? '0' : '1'}" aria-pressed="${S.myOffTheme}">
+            ${S.myOffTheme ? 'Signalé hors thème (annuler)' : 'Hors thème ?'}
+          </button>`;
+      }
     }
     $('guessBody').innerHTML = body;
   }
+
+  // Blind test progressif : les étapes de l'extrait (1 s, 2 s, 4 s...).
+  function renderStages() {
+    const st = S.phase === 'guess' ? S.stage : null;
+    $('stages').classList.toggle('hidden', !st);
+    if (!st) return;
+    $('stageList').innerHTML = S.config.progressiveClips.map((clip, i) => {
+      const cls = i < st.index ? 'past' : i === st.index ? 'current' : '';
+      return `<li class="${cls}">${clip} s</li>`;
+    }).join('');
+    $('stageInfo').textContent = `Extrait de ${st.clip} s · vaut ${st.points} points (moitié titre, moitié artiste)`;
+  }
+
+  let answerKey = null; // son pour lequel le champ de réponse a été préparé
+
+  // Blind test : champ de réponse, ce que j'ai trouvé, et l'avancement des autres.
+  function renderAnswer() {
+    const key = `${S.round}:${S.sound.index}`;
+    const found = S.found || { title: null, artist: null };
+    const done = found.title !== null && found.artist !== null;
+    const form = $('answerForm');
+    form.classList.toggle('hidden', !S.canAnswer);
+    if (answerKey !== key) {
+      answerKey = key;
+      $('answerInput').value = '';
+      setFeedback('', '');
+      if (S.canAnswer && window.matchMedia('(pointer: fine)').matches) $('answerInput').focus();
+    }
+    const tag = (el, pts, label) => {
+      el.classList.toggle('on', pts !== null);
+      el.textContent = pts !== null ? `${label} +${pts}` : label;
+    };
+    tag($('foundTitle'), found.title, 'Titre');
+    tag($('foundArtist'), found.artist, 'Artiste');
+    $('answerInput').disabled = done;
+    $('answerBtn').disabled = done;
+    $('answerInput').placeholder = done ? 'Tout trouvé, attends les autres' : 'Titre ou artiste...';
+
+    const notice = S.canAnswer ? '' : '<div class="notice"><strong>Tu joues à la prochaine manche.</strong><span>Profite du son.</span></div>';
+    $('guessBody').innerHTML = `${notice}<div class="chips quiz-progress">` + (S.progress || []).map((p) => `
+        <span class="chip${p.title && p.artist ? ' done' : ''}">${avatar(p.name)}${esc(p.name)}
+          <span class="mini${p.title ? ' on' : ''}" title="Titre">T</span><span class="mini${p.artist ? ' on' : ''}" title="Artiste">A</span>
+        </span>`).join('') + '</div>';
+  }
+
+  function setFeedback(text, kind) {
+    const el = $('answerFeedback');
+    el.textContent = text;
+    el.className = `answer-feedback${kind ? ` ${kind}` : ''}`;
+  }
+
+  $('answerForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = $('answerInput');
+    const text = input.value.trim();
+    if (!text || input.disabled) return;
+    send('answer', { text }, (res) => {
+      if (!res || res.error) return setFeedback((res && res.error) || 'Réponse non envoyée.', 'bad');
+      if (res.found) {
+        const parts = [];
+        if (res.gained.title) parts.push(`Titre trouvé ! +${res.gained.title}`);
+        if (res.gained.artist) parts.push(`Artiste trouvé ! +${res.gained.artist}`);
+        setFeedback(parts.join(' · '), 'good');
+        input.value = '';
+      } else {
+        setFeedback(res.title || res.artist ? 'Déjà trouvé, cherche l\'autre partie.' : 'Pas ça...', 'bad');
+        input.select();
+        $('answerForm').classList.remove('shake');
+        void $('answerForm').offsetWidth; // relance l'animation
+        $('answerForm').classList.add('shake');
+      }
+    });
+  });
 
   function rankingHtml(gains) {
     return [...S.players]
       .sort((a, b) => b.score - a.score)
       .map((p, i) => {
-        const gain = gains && gains[p.id] ? `<span class="gain">+${gains[p.id]}</span>` : '';
+        const g = gains && gains[p.id];
+        const gain = g ? `<span class="gain${g < 0 ? ' loss' : ''}">${g > 0 ? '+' : ''}${g}</span>` : '';
         return `<li class="${p.id === S.you ? 'me' : ''}"><span class="rank">${i + 1}</span>${avatar(p.name)}
           <span class="player-name">${esc(p.name)}</span>${gain}<span class="score">${p.score}</span></li>`;
       })
@@ -394,20 +592,40 @@
     $('revealCover').setAttribute('src', /^https:\/\//.test(r.track.cover) ? r.track.cover : '');
     $('revealTitle').textContent = r.track.title;
     $('revealArtist').textContent = r.track.artist;
+    $('revealRanking').innerHTML = rankingHtml(r.gains);
+    if (r.kind === 'quiz') return renderQuizReveal(r);
 
+    $('revealListTitle').textContent = 'Votes';
     const ownerGain = r.gains[r.ownerId] || 0;
     const fooled = r.votes.filter((v) => !v.correct).length;
     const who = r.ownerId === S.you ? 'Toi' : esc(r.ownerName);
-    $('revealOwner').innerHTML = `<small>C'était</small><strong>${who}</strong>` +
-      (ownerGain ? `<em>+${ownerGain} pts · ${plural(fooled, 'piégé')}</em>` : '');
+    let detail = '';
+    if (fooled) detail = `+${fooled * S.config.pointsPerFooled} pts · ${plural(fooled, 'piégé')}`;
+    if (r.offTheme && r.offTheme.penalized) detail += `${detail ? ' · ' : ''}hors thème -${r.offTheme.penalty}`;
+    $('revealOwner').innerHTML = `<small>C'était</small><strong>${who}</strong>` + (detail || ownerGain ? `<em>${detail}</em>` : '');
 
-    $('revealVotes').innerHTML = r.votes.length
+    let list = r.votes.length
       ? r.votes.map((v) => `<li>${avatar(v.voterName)}<span class="who">${esc(v.voterName)}</span>
           <span class="arrow">a voté</span><span>${esc(v.targetName)}</span>
-          ${v.correct ? `<span class="ok">Juste +${r.gains[v.voterId] || 0}</span>` : '<span class="ko">Raté</span>'}</li>`).join('')
+          ${v.correct ? `<span class="ok">Juste +${S.config.pointsGoodGuess}</span>` : '<span class="ko">Raté</span>'}</li>`).join('')
       : '<li class="muted">Personne n\'a voté.</li>';
+    if (r.offTheme && r.offTheme.count) {
+      const o = r.offTheme;
+      list = `<li class="offtheme-line${o.penalized ? ' penalized' : ''}">Hors thème pour ${o.count} sur ${o.total} :
+          ${o.penalized ? `${esc(r.ownerName)} perd ${o.penalty} points` : 'pas de majorité, pas de pénalité'}</li>` + list;
+    }
+    $('revealVotes').innerHTML = list;
+  }
 
-    $('revealRanking').innerHTML = rankingHtml(r.gains);
+  function renderQuizReveal(r) {
+    $('revealListTitle').textContent = 'Réponses';
+    $('revealOwner').innerHTML = `<small>C'était</small><strong>${esc(r.track.title)}</strong><em>${esc(r.track.artist)}</em>`;
+    const part = (pts, label) => (pts !== null ? `<span class="ok">${label} +${pts}</span>` : '');
+    $('revealVotes').innerHTML = r.results.length
+      ? r.results.map((x) => `<li>${avatar(x.name)}<span class="who">${esc(x.name)}</span>
+          ${x.title === null && x.artist === null ? '<span class="ko">Rien trouvé</span>' : `<span class="parts">${part(x.title, 'Titre')}${part(x.artist, 'Artiste')}</span>`}
+        </li>`).join('')
+      : '<li class="muted">Personne n\'a joué ce son.</li>';
   }
 
   function renderEnd() {
@@ -530,6 +748,8 @@
   // ---------------------------------------------------------------- vote
 
   $('guessBody').addEventListener('click', (e) => {
+    const flag = e.target.closest('[data-offtheme]');
+    if (flag) return send('offtheme', { flag: flag.dataset.offtheme === '1' }, toastError);
     const btn = e.target.closest('[data-vote]');
     if (!btn || btn.disabled) return;
     const targetId = btn.dataset.vote;
@@ -650,8 +870,19 @@
     else $('createBtn').click();
   });
 
-  $('startBtn').addEventListener('click', () => send('start', null, toastError));
-  $('restartBtn').addEventListener('click', () => send('start', null, toastError));
+  // En blind test, l'hôte charge d'abord les sons : le bouton patiente pendant ce temps.
+  function start(btn) {
+    const label = btn.textContent;
+    btn.disabled = true;
+    if (Catalog.isQuiz(S.settings.mode)) btn.textContent = 'Chargement des sons...';
+    send('start', null, (res) => {
+      btn.textContent = label;
+      btn.disabled = false;
+      toastError(res);
+    });
+  }
+  $('startBtn').addEventListener('click', () => start($('startBtn')));
+  $('restartBtn').addEventListener('click', () => start($('restartBtn')));
 
   $('shareBtn').addEventListener('click', async () => {
     const url = inviteUrl(S.code);

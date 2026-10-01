@@ -9,6 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -83,6 +85,7 @@
     <!-- Pick -->
     <section class="screen hidden" id="screen-pick">
       <h2 class="title" id="pickTitle">Choisis tes sons</h2>
+      <div class="theme-banner hidden" data-theme-banner></div>
       <p class="muted">Personne ne verra tes choix avant le reveal.</p>
       <div class="my-picks" id="myPicks"></div>
       <div class="search">
@@ -100,19 +103,35 @@
     <!-- Guess / délibération -->
     <section class="screen hidden" id="screen-guess">
       <p class="eyebrow center" id="guessCounter"></p>
+      <div class="theme-banner hidden" data-theme-banner></div>
+      <div class="stages hidden" id="stages">
+        <ol class="stage-list" id="stageList"></ol>
+        <p class="muted center" id="stageInfo"></p>
+      </div>
       <div class="deliberate hidden" id="deliberateBanner">
         <strong>Vous n'êtes pas d'accord</strong>
         <span>Débattez : ceux qui n'ont pas encore voté ont un peu plus de temps pour se décider.</span>
         <ul class="tally" id="tally"></ul>
       </div>
       <div class="vinyl-wrap">
-        <div class="vinyl" id="guessVinyl"><img id="guessCover" alt=""></div>
+        <div class="vinyl" id="guessVinyl"><img id="guessCover" alt=""><span class="vinyl-mystery hidden" id="guessMystery" aria-hidden="true">?</span></div>
       </div>
       <div class="track-info">
         <div class="track-title" id="guessTitle"></div>
         <div class="track-artist" id="guessArtist"></div>
       </div>
       <button class="btn btn-primary hidden" id="unlockBtn">Activer le son</button>
+      <form class="answer hidden" id="answerForm" autocomplete="off">
+        <div class="found-row">
+          <span class="found-tag" id="foundTitle">Titre</span>
+          <span class="found-tag" id="foundArtist">Artiste</span>
+        </div>
+        <div class="row">
+          <input class="input" id="answerInput" maxlength="100" placeholder="Titre ou artiste..." enterkeyhint="send" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Ta réponse">
+          <button class="btn btn-primary" type="submit" id="answerBtn">Valider</button>
+        </div>
+        <p class="answer-feedback" id="answerFeedback" aria-live="polite"></p>
+      </form>
       <div id="guessBody"></div>
     </section>
 
@@ -128,7 +147,7 @@
       </div>
       <div class="reveal-owner" id="revealOwner"></div>
       <div class="card">
-        <h2>Votes</h2>
+        <h2 id="revealListTitle">Votes</h2>
         <ul class="vote-list" id="revealVotes"></ul>
       </div>
       <div class="card">
@@ -160,6 +179,8 @@
         </button>
       </div>
       <ol class="rules" id="rulesList"></ol>
+      <h3 class="rules-subtitle">Les modes de jeu</h3>
+      <ul class="modes-list" id="rulesModes"></ul>
       <p class="rules-more"><a href="tuto.html" target="_blank" rel="noopener" data-tuto>Tuto complet : installation et lancement d'une partie</a></p>
     </div>
   </div>
@@ -168,6 +189,7 @@
 
   <script src="vendor/peerjs.min.js"></script>
   <script src="config.js"></script>
+  <script src="catalog.js"></script>
   <script src="game.js"></script>
   <script src="deezer.js"></script>
   <script src="net.js"></script>

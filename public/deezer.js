@@ -74,5 +74,19 @@
     return track;
   }
 
-  window.BYFDeezer = { search, resolveTrack };
+  // Sons d'une source du blind test (catalog.SOURCES) : classement d'un style ou playlist Deezer.
+  async function loadTracks(sourceId) {
+    const source = BYFCatalog.source(sourceId);
+    if (!source) return [];
+    const path = source.playlist ? `/playlist/${source.playlist}/tracks` : `/chart/${source.chart}/tracks`;
+    const data = check(await jsonp(`${API}${path}?limit=100`, 10000));
+    const tracks = (Array.isArray(data.data) ? data.data : [])
+      .filter((t) => t.readable !== false)
+      .map(toTrack)
+      .filter(Boolean);
+    tracks.forEach(remember);
+    return tracks;
+  }
+
+  window.BYFDeezer = { search, resolveTrack, loadTracks };
 })();

@@ -3,6 +3,7 @@
 // Lanceur BlindYourFriends : démarre le serveur de la page et l'ouvre dans une fenêtre.
 // L'hôte y fait tourner la partie ; les amis rejoignent depuis leur navigateur ou le lanceur.
 
+const path = require('path');
 const { app, BrowserWindow, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { startServer } = require('../server');
@@ -25,6 +26,8 @@ async function createWindow() {
     title: 'BlindYourFriends',
     backgroundColor: '#12081f',
     autoHideMenuBar: true,
+    // L'exe empaqueté porte déjà l'icône ; en développement on la donne à la fenêtre.
+    icon: app.isPackaged ? undefined : path.join(__dirname, '..', 'build', 'icon.png'),
     webPreferences: {
       // L'hôte fait tourner les minuteurs de la partie : ils ne doivent pas ralentir
       // quand la fenêtre est réduite ou en arrière-plan.

@@ -22,14 +22,16 @@ On peut aussi héberger depuis la page du jeu dans un navigateur, à condition d
 
 Ouvrir le lien d'invitation (ou la page du jeu, puis taper le code à 4 lettres). Rien à installer, ça marche sur téléphone comme sur PC. Si l'hôte ferme le lanceur, la partie s'arrête pour tout le monde.
 
-## Déroulement
+## Modes de jeu
 
-1. **Préparation** : chaque joueur choisit le nombre de sons fixé par l'hôte (1 à 5), 30 s par son.
-2. **Écoute** (30 s par son) : on vote pour la personne qui a mis le son. Le premier vote est définitif. Le propriétaire ne vote pas. Dès que tout le monde a voté, reveal immédiat.
-3. **Délibération** (30 s de plus) : seulement si les premiers votes ne désignent pas tous la même personne et qu'il reste des joueurs sans vote. On voit la répartition des votes et on débat ; les indécis votent à leur tour.
-4. **Reveal** : qui l'a mis, qui a voté quoi, les points gagnés.
+L'hôte choisit le mode dans le lobby (et peut en changer en fin de manche ; les scores se cumulent).
 
-Points : +100 par bonne réponse, +50 pour le propriétaire par joueur piégé. Les scores se cumulent d'une manche à l'autre. Les règles sont aussi dans le jeu (bouton `?` en bas à droite) et le volume se règle dans la barre du haut.
+- **BlindYourFriends** : chacun choisit en secret le nombre de sons fixé par l'hôte (1 à 5, 30 s par son). Les sons passent un par un (30 s chacun) et on vote pour la personne qui l'a mis ; le premier vote est définitif et le propriétaire ne vote pas. Si les premiers votes divergent et qu'il reste des indécis, 30 s de délibération. Points : +100 par bonne réponse, +50 pour le propriétaire par joueur piégé.
+- **BlindYourFriends à thème** : pareil, avec un thème imposé (liste, thème libre ou tirage au sort). Pendant l'écoute, on peut signaler un son « hors thème » : si la majorité des autres joueurs le signale, son propriétaire perd 100 points.
+- **Blind test** : le jeu choisit les sons (5 à 20) dans un style choisi par l'hôte, à partir des classements et playlists Deezer. On tape le titre ou l'artiste, avec tolérance aux accents et petites fautes. +100 le titre, +100 l'artiste, +50 au premier qui trouve chacun. Le titre et la pochette restent cachés jusqu'au reveal.
+- **Blind test progressif** : l'extrait dure 1 s, 2 s, 4 s, 8 s, 16 s puis 30 s, avec 5 s pour répondre après chacun. Trouver vaut 1000, 800, 600, 400, 250 ou 100 points selon l'étape, moitié pour le titre, moitié pour l'artiste.
+
+Les règles du mode en cours sont aussi dans le jeu (bouton `?` en bas à droite) et le volume se règle dans la barre du haut.
 
 ## Réglages (`public/config.js`)
 
@@ -46,10 +48,11 @@ Environ 10 à 20 % des connexions directes échouent derrière certains réseaux
 
 ## Comment ça marche
 
-- `public/game.js` : le moteur (machine à états, scores), exécuté chez l'hôte.
+- `public/game.js` : le moteur (machine à états, scores des 4 modes), exécuté chez l'hôte.
+- `public/catalog.js` : les modes, thèmes et styles de musique, et la vérification tolérante des réponses tapées.
 - `public/net.js` : le transport WebRTC via PeerJS. L'id PeerJS de l'hôte est `byf-<CODE>` ; le serveur public PeerJS sert uniquement à la mise en relation, puis tout passe en direct.
-- `public/deezer.js` : recherche Deezer depuis le navigateur (JSONP). L'hôte résout lui-même chaque son choisi à partir de son id : un joueur ne peut pas imposer une URL.
-- Chaque joueur ne reçoit que son propre état : personne ne voit les choix des autres, ni qui a voté pendant l'écoute. L'hôte, lui, a techniquement tout sur sa machine.
+- `public/deezer.js` : recherche Deezer depuis le navigateur (JSONP), et chargement des sons du blind test. L'hôte résout lui-même chaque son choisi à partir de son id : un joueur ne peut pas imposer une URL.
+- Chaque joueur ne reçoit que son propre état : personne ne voit les choix des autres, ni qui a voté pendant l'écoute, ni la réponse d'un blind test avant le reveal. L'hôte, lui, a techniquement tout sur sa machine.
 - `server.js` : sert les fichiers de `public/` (pour le lanceur et le Wi-Fi local).
 - `electron/main.js` : le lanceur. Il lève le blocage de la lecture auto, empêche les minuteurs de ralentir quand la fenêtre est réduite et se met à jour depuis les releases GitHub.
 
@@ -71,8 +74,9 @@ Environ 10 à 20 % des connexions directes échouent derrière certains réseaux
 npm install
 npm run desktop     # lanceur en mode développement
 npm start           # la page seule, dans le navigateur : http://localhost:3000
-npm run simulate    # partie simulée à 3 joueurs sur le moteur (vrais sons Deezer)
+npm run simulate    # parties simulées sur le moteur, dans les 4 modes (vrais sons Deezer)
 npm run dist        # construit l'installeur en local dans dist/
+python build/make-icon.py   # regénère l'icône (build/ et public/)
 ```
 
 Dans un navigateur classique, l'hôte doit garder l'onglet de la partie ouvert au premier plan ou en lecture, sinon le navigateur peut ralentir les minuteurs. Le lanceur n'a pas ce problème.

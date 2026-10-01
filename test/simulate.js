@@ -5,6 +5,7 @@
 //   node test/simulate.js
 
 const BYFGame = require('../public/game.js');
+const Catalog = require('../public/catalog.js');
 
 const CONFIG = { pickTime: 8, guessTime: 3, deliberateTime: 2, revealTime: 1 };
 let failures = 0;
@@ -52,15 +53,29 @@ async function resolveTrack(id) {
   return toTrack(await deezer(`/track/${id}`));
 }
 
+// Sons du blind test ; le test garde la correspondance extrait -> son pour connaître les réponses.
+const byPreview = new Map();
+async function loadTracks(sourceId) {
+  const src = Catalog.source(sourceId);
+  const path = src.playlist ? `/playlist/${src.playlist}/tracks` : `/chart/${src.chart}/tracks`;
+  const tracks = (await deezer(`${path}?limit=100`)).data
+    .filter((t) => t.readable !== false)
+    .map(toTrack)
+    .filter(Boolean);
+  tracks.forEach((t) => byPreview.set(t.preview, t));
+  return tracks;
+}
+
 // ------------------------------------------------------------ Joueurs simulés
 
 const clients = new Map(); // id -> client (ids uniques toutes parties confondues)
 
-function makeRoom() {
+function makeRoom(config = CONFIG) {
   return BYFGame.createRoom({
     code: BYFGame.makeCode(),
-    config: CONFIG,
+    config,
     resolveTrack,
+    loadTracks,
     // Livraison asynchrone, comme sur le réseau.
     send: (pid, state) => {
       const c = clients.get(pid);
@@ -310,6 +325,149 @@ async function main() {
     check(r4.players.every((p) => p.score === expected4[p.id]), `scores : ${r4.players.map((p) => `${p.name}=${p.score}`).join(', ')}`);
   }
   room4.destroy();
+
+  // ------------------------------------------------------------ Mode à thème
+  console.log('\nMode BlindYourFriends à thème : 3 joueurs, 1 son chacun');
+  const roomT = makeRoom();
+  const T = ['Léa', 'Malo', 'Nina'].map((n) => client(n, roomT));
+  for (const p of T) await join(p, p.label);
+  check(/inconnu/.test((await emit(T[0], 'settings', { mode: 'karaoke' })).error || ''), 'mode inconnu refusé');
+  check((await emit(T[0], 'settings', { mode: 'byf-theme', theme: 'custom', customTheme: '', songsPerPlayer: 1 })).ok, 'mode à thème, thème libre');
+  check(/thème/.test((await emit(T[0], 'start')).error || ''), 'thème libre vide : lancement refusé');
+  check((await emit(T[0], 'settings', { customTheme: '  Chanson   de   mariage  ' })).ok, 'thème libre écrit');
+  check((await emit(T[0], 'start')).ok, 'manche lancée');
+  const tp = await waitFor(T[1], (s) => s.phase === 'pick', 'pick à thème', 0);
+  check(tp.mode === 'byf-theme' && tp.theme === 'Chanson de mariage', `thème affiché à tous (« ${tp.theme} »)`);
+  const tTracks = [rb[4], rc[3], ra[6]];
+  const ownersT = new Map(T.map((p, i) => [tTracks[i].id, p]));
+  for (let i = 0; i < 3; i++) await emit(T[i], 'pick', { id: tTracks[i].id });
+  const expectedT = Object.fromEntries(T.map((p) => [p.id, 0]));
+  for (let k = 1; k <= 3; k++) {
+    const g = await waitFor(T[0], (s) => s.phase === 'guess' && s.sound.index === k, `son ${k}`, 0);
+    const owner = ownersT.get(g.sound.track.id);
+    const [X, Y] = T.filter((p) => p !== owner);
+    if (k === 1) {
+      check(!!(await emit(owner, 'offtheme', { flag: true })).error, 'le proprio ne peut pas juger son propre son');
+      // Les deux autres jugent le son hors thème (Y change d'avis deux fois) : pénalité.
+      await emit(X, 'offtheme', { flag: true });
+      await emit(Y, 'offtheme', { flag: true });
+      await emit(Y, 'offtheme', { flag: false });
+      await emit(Y, 'offtheme', { flag: true });
+    } else if (k === 2) {
+      await emit(X, 'offtheme', { flag: true }); // 1 sur 2 : pas de majorité
+    }
+    await emit(X, 'vote', { targetId: owner.id });
+    await emit(Y, 'vote', { targetId: k === 1 ? owner.id : X.id });
+    expectedT[X.id] += 100;
+    if (k === 1) {
+      expectedT[Y.id] += 100;
+      expectedT[owner.id] -= 100;
+    } else {
+      expectedT[owner.id] += 50;
+    }
+    const r = await waitFor(T[0], (s) => s.phase === 'reveal' && s.sound.index === k, `reveal ${k}`);
+    const o = r.reveal.offTheme;
+    if (k === 1) check(o.penalized && o.count === 2 && r.reveal.gains[owner.id] === -100, 'hors thème pour 2 sur 2 : -100 au proprio');
+    if (k === 2) check(!o.penalized && o.count === 1, 'hors thème pour 1 sur 2 : pas de pénalité');
+    if (k === 3) check(!o.penalized && o.count === 0, 'personne ne signale : pas de pénalité');
+    check(r.players.every((p) => p.score === expectedT[p.id]), `scores : ${r.players.map((p) => `${p.name}=${p.score}`).join(', ')}`);
+  }
+  roomT.destroy();
+
+  // ------------------------------------------------------------ Blind test classique
+  console.log('\nBlind test classique : 2 joueurs, 5 sons de rap');
+  const roomQ = makeRoom();
+  const [Q1, Q2] = ['Oscar', 'Paula'].map((n) => client(n, roomQ));
+  await join(Q1, Q1.label);
+  await join(Q2, Q2.label);
+  check(!!(await emit(Q1, 'settings', { mode: 'classic', source: 'jazz-manouche' })).error, 'style inconnu refusé');
+  check(!!(await emit(Q1, 'settings', { mode: 'classic', songCount: 3 })).error, 'nombre de sons hors bornes refusé');
+  check((await emit(Q1, 'settings', { mode: 'classic', source: 'rap', songCount: 5 })).ok, 'blind test réglé (rap, 5 sons)');
+  check((await emit(Q1, 'start')).ok, "l'hôte charge les sons et lance");
+  const expectedQ = { [Q1.id]: 0, [Q2.id]: 0 };
+  const playedQ = [];
+  const say = async (c, text) => {
+    await sleep(320); // au-delà de l'anti-spam
+    return emit(c, 'answer', { text });
+  };
+  for (let k = 1; k <= 5; k++) {
+    const g = await waitFor(Q2, (s) => s.phase === 'guess' && s.sound.index === k, `son ${k}`, 0);
+    const track = byPreview.get(g.sound.track.preview);
+    playedQ.push(track.id);
+    if (k === 1) {
+      check(g.sound.total === 5 && Object.keys(g.sound.track).join() === 'preview', "pendant l'écoute : seulement l'extrait, ni titre ni artiste");
+      console.log(`        (réponse : ${track.artist} - ${track.title})`);
+      const wrong = await say(Q1, 'zzzz pas du tout');
+      check(wrong.ok && !wrong.found, 'mauvaise réponse : rien de trouvé');
+      check(/Doucement/.test((await emit(Q1, 'answer', { text: 'encore' })).error || ''), 'réponses trop rapprochées refusées');
+      const r1 = await say(Q1, track.title);
+      check(r1.found && r1.gained.title === 150, 'Oscar trouve le titre en premier : 100 + 50 de bonus');
+      const r2 = await say(Q2, track.title.toLowerCase());
+      check(r2.found && r2.gained.title === 100, 'Paula trouve le titre ensuite : 100');
+      const again = await say(Q1, track.title);
+      check(!again.found, 'retrouver le même titre ne rapporte rien');
+      const r3 = await say(Q1, track.artist);
+      check(r3.gained.artist === 150, "Oscar trouve l'artiste en premier : 150");
+      const prog = await waitFor(Q2, (s) => s.progress && s.progress.find((p) => p.id === Q1.id).artist, 'avancement', 0, 2000);
+      check(prog.progress.find((p) => p.id === Q1.id).title, "Paula voit ce qu'Oscar a trouvé (sans la réponse)");
+      expectedQ[Q1.id] += 300;
+      expectedQ[Q2.id] += 100;
+      const t0 = Date.now();
+      await say(Q2, `${track.artist} ${track.title}`);
+      expectedQ[Q2.id] += 100;
+      const r = await waitFor(Q1, (s) => s.phase === 'reveal' && s.sound.index === k, 'reveal 1');
+      check(Date.now() - t0 < 1000, 'tout le monde a tout trouvé : reveal immédiat');
+      check(r.reveal.kind === 'quiz' && r.reveal.track.title === track.title, "le reveal montre le titre et l'artiste");
+    } else if (k === 2) {
+      const t0 = Date.now();
+      const r = await waitFor(Q1, (s) => s.phase === 'reveal' && s.sound.index === k, 'reveal 2');
+      check(Date.now() - t0 >= 2500 && Object.keys(r.reveal.gains).length === 0, 'personne ne trouve : reveal au bout du temps, 0 point');
+    } else {
+      await say(Q1, `${track.artist} ${track.title}`);
+      await say(Q2, `${track.title} ${track.artist}`);
+      expectedQ[Q1.id] += 300;
+      expectedQ[Q2.id] += 200;
+      await waitFor(Q1, (s) => s.phase === 'reveal' && s.sound.index === k, `reveal ${k}`);
+    }
+    await sleep(20);
+    check(Q1.state.players.every((p) => p.score === expectedQ[p.id]), `son ${k} : ${Q1.state.players.map((p) => `${p.name}=${p.score}`).join(', ')}`);
+  }
+  await waitFor(Q1, (s) => s.phase === 'end', 'fin du blind test');
+  check((await emit(Q1, 'start')).ok, 'seconde manche de blind test');
+  const g2 = await waitFor(Q1, (s) => s.phase === 'guess' && s.round === 2, 'manche 2', 0);
+  check(!playedQ.includes(byPreview.get(g2.sound.track.preview).id), 'les sons déjà joués ne reviennent pas');
+  roomQ.destroy();
+
+  // ------------------------------------------------------------ Blind test progressif
+  console.log('\nBlind test progressif : 2 joueurs, étapes accélérées');
+  const roomP = makeRoom(Object.assign({}, CONFIG, {
+    progressiveClips: [0.3, 0.6, 0.9],
+    progressivePoints: [1000, 600, 200],
+    stageGap: 0.4,
+    songCountMin: 2,
+  }));
+  const [R1, R2] = ['Quentin', 'Rose'].map((n) => client(n, roomP));
+  await join(R1, R1.label);
+  await join(R2, R2.label);
+  await emit(R1, 'settings', { mode: 'progressive', source: '80s', songCount: 2 });
+  check((await emit(R1, 'start')).ok, 'progressif lancé (années 80)');
+  const s0 = await waitFor(R1, (s) => s.phase === 'guess' && s.sound.index === 1, 'étape 1', 0);
+  const trackP = byPreview.get(s0.sound.track.preview);
+  check(s0.stage.index === 0 && s0.stage.clip === 0.3 && s0.stage.points === 1000, 'étape 1 : extrait court, 1000 points en jeu');
+  check((await emit(R1, 'answer', { text: trackP.title })).gained.title === 500, "titre à l'étape 1 : 500 (moitié de 1000)");
+  await waitFor(R1, (s) => s.stage && s.stage.index === 1, 'étape 2');
+  check((await emit(R2, 'answer', { text: trackP.artist })).gained.artist === 300, "artiste à l'étape 2 : 300 (moitié de 600)");
+  await waitFor(R1, (s) => s.stage && s.stage.index === 2, 'étape 3');
+  check((await emit(R1, 'answer', { text: trackP.artist })).gained.artist === 100, "artiste à l'étape 3 : 100");
+  await sleep(320);
+  await emit(R2, 'answer', { text: trackP.title });
+  const rp = await waitFor(R1, (s) => s.phase === 'reveal' && s.sound.index === 1, 'reveal progressif');
+  check(rp.reveal.gains[R1.id] === 600 && rp.reveal.gains[R2.id] === 400, 'gains : Quentin 600, Rose 400');
+  const t2 = Date.now();
+  await waitFor(R1, (s) => s.phase === 'guess' && s.sound.index === 2, 'son 2', 0);
+  await waitFor(R1, (s) => s.phase === 'reveal' && s.sound.index === 2, 'reveal 2');
+  check(Date.now() - t2 >= 2400, 'sans réponse : toutes les étapes passent avant le reveal');
+  roomP.destroy();
 
   // ------------------------------------------------------------ Départs
   console.log('\nDéparts');

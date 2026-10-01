@@ -10,6 +10,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="tuto">
@@ -30,7 +32,7 @@
         <li><a href="#installer">Installer le lanceur (l'hôte)</a></li>
         <li><a href="#creer">Créer la partie et inviter</a></li>
         <li><a href="#rejoindre">Rejoindre (les amis)</a></li>
-        <li><a href="#jouer">Jouer une manche</a></li>
+        <li><a href="#jouer">Les modes de jeu</a></li>
         <li><a href="#problemes">En cas de souci</a></li>
       </ol>
     </nav>
@@ -103,8 +105,15 @@
           </div>
         </li>
         <li>
-          <p>Choisis combien de sons chaque joueur devra choisir (de 1 à 5). Plus il y en a, plus la manche est longue.</p>
+          <p>Choisis le <strong>mode de jeu</strong> (détaillé <a href="#jouer">plus bas</a>), puis ses réglages : nombre de sons par joueur, thème, ou style de musique selon le mode.</p>
           <div class="mock card" aria-hidden="true">
+            <h2>Mode de jeu</h2>
+            <div class="modes">
+              <span class="mode-card"><strong>Blind test</strong><span>Le jeu choisit les sons : trouve le titre et l'artiste.</span></span>
+              <span class="mode-card"><strong>BlindYourFriends à thème</strong><span>Chacun choisit des sons sur un thème imposé.</span></span>
+              <span class="mode-card selected"><strong>BlindYourFriends</strong><span>Chacun choisit des sons en secret : devinez qui a mis quoi.</span></span>
+              <span class="mode-card"><strong>Blind test progressif</strong><span>1 s, 2 s, 4 s... 30 s : plus tu trouves tôt, plus tu marques.</span></span>
+            </div>
             <div class="settings-row">
               <div><h2>Sons par joueur</h2><p class="muted">60 s pour les choisir</p></div>
               <div class="stepper"><span class="icon-btn icon-btn-small">-</span><output>2</output><span class="icon-btn icon-btn-small">+</span></div>
@@ -140,7 +149,11 @@
 
     <!-- 5 -->
     <section class="tuto-section" id="jouer">
-      <h2 class="title"><span class="step-num">5</span>Jouer une manche</h2>
+      <h2 class="title"><span class="step-num">5</span>Les modes de jeu</h2>
+      <p>L'hôte choisit le mode avant chaque manche, et peut en changer en fin de manche : les scores se cumulent.</p>
+
+      <h3 class="mode-title">BlindYourFriends</h3>
+      <p class="muted">Le mode d'origine : chacun choisit des sons en secret, et on devine qui a mis quoi.</p>
 
       <div class="phase card">
         <p class="eyebrow">Préparation · 30 s par son</p>
@@ -175,7 +188,41 @@
         </ul>
       </div>
 
-      <p class="muted">À la fin, le classement s'affiche. L'hôte peut <strong>relancer une manche</strong> : les scores se cumulent. Les règles sont aussi dans le jeu, avec le bouton <strong>?</strong> en bas à droite.</p>
+      <h3 class="mode-title">BlindYourFriends à thème</h3>
+      <div class="phase card">
+        <p>Même déroulement, mais l'hôte impose un <strong>thème</strong> : rap, années 2000, génériques de dessins animés, plaisir coupable... ou un thème libre qu'il écrit lui-même, ou un thème tiré au hasard. Le thème s'affiche en haut de l'écran.</p>
+        <div class="mock theme-banner" aria-hidden="true"><span>Thème</span><strong>Plaisir coupable</strong></div>
+        <p>Pendant l'écoute, si un son ne colle pas au thème, appuie sur <strong>Hors thème ?</strong>. Si la majorité des autres joueurs le signale, son propriétaire perd <strong>100 points</strong>.</p>
+      </div>
+
+      <h3 class="mode-title">Blind test</h3>
+      <div class="phase card">
+        <p>Le jeu choisit les sons dans le <strong>style de musique</strong> choisi par l'hôte (hits du moment, rap, années 80, variété française, génériques...). Tout le monde écoute le même extrait, sans pochette ni titre.</p>
+        <p>Tape le <strong>titre</strong> ou l'<strong>artiste</strong> et valide. Les accents, majuscules et petites fautes de frappe sont tolérés, et tu peux taper les deux d'un coup (« daft punk get lucky »). Réessaie autant que tu veux.</p>
+        <div class="mock answer" aria-hidden="true">
+          <div class="found-row"><span class="found-tag on">Titre +150</span><span class="found-tag">Artiste</span></div>
+          <div class="row"><span class="input">daft punk</span><span class="btn btn-primary">Valider</span></div>
+        </div>
+        <ul class="points">
+          <li><strong>+100</strong> pour le titre, <strong>+100</strong> pour l'artiste</li>
+          <li><strong>+50</strong> de bonus au premier qui trouve chacun des deux</li>
+        </ul>
+        <p>Chaque son dure 30 s, ou moins si tout le monde a tout trouvé.</p>
+      </div>
+
+      <h3 class="mode-title">Blind test progressif</h3>
+      <div class="phase card">
+        <p>Comme le blind test, mais l'extrait s'allonge : <strong>1 s</strong>, puis 2 s, 4 s, 8 s, 16 s et enfin 30 s, avec 5 s pour répondre après chaque extrait. Plus tu trouves tôt, plus ça rapporte.</p>
+        <ol class="mock stage-list" aria-hidden="true">
+          <li class="past">1 s</li><li class="current">2 s</li><li>4 s</li><li>8 s</li><li>16 s</li><li>30 s</li>
+        </ol>
+        <ul class="points">
+          <li>1 s : <strong>1000</strong> · 2 s : <strong>800</strong> · 4 s : <strong>600</strong> · 8 s : <strong>400</strong> · 16 s : <strong>250</strong> · 30 s : <strong>100</strong></li>
+          <li>La moitié pour le titre, l'autre moitié pour l'artiste</li>
+        </ul>
+      </div>
+
+      <p class="muted">À la fin, le classement s'affiche et l'hôte peut <strong>relancer une manche</strong>. Les règles du mode en cours sont aussi dans le jeu, avec le bouton <strong>?</strong> en bas à droite.</p>
     </section>
 
     <!-- 6 -->
@@ -197,6 +244,10 @@
         <details class="card">
           <summary>Impossible de se connecter en 4G</summary>
           <p>Certains réseaux mobiles ou d'entreprise bloquent les connexions directes entre appareils. Passe sur un Wi-Fi (celui de l'hôte, par exemple) et réessaie.</p>
+        </details>
+        <details class="card">
+          <summary>Ma réponse n'est pas acceptée (blind test)</summary>
+          <p>Vérifie l'orthographe : une petite faute passe, mais pas un mot oublié. Tape le titre principal, sans la version (« remix », « live »...). Pour un duo, un seul des artistes suffit. Les surnoms ne sont pas reconnus.</p>
         </details>
         <details class="card">
           <summary>« Ce pseudo est déjà pris »</summary>
