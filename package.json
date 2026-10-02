@@ -1,6 +1,6 @@
 {
   "name": "blind-your-friends",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "BlindYourFriends : blind test multijoueur entre potes",
   "main": "electron/main.js",
   "private": true,
