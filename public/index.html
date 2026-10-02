@@ -20,6 +20,7 @@
   <header class="topbar hidden" id="topbar">
     <div class="topbar-code">Code <strong id="tbCode"></strong></div>
     <div class="topbar-round" id="tbRound"></div>
+    <div class="my-score hidden" id="myScore" aria-live="polite"><span>Score</span><strong id="myScoreValue">0</strong></div>
     <div class="volume">
       <button class="icon-btn icon-btn-small" id="volumeBtn" aria-label="Volume" aria-expanded="false">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path id="volumeWaves" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -47,6 +48,11 @@
         <p class="tagline">Qui a mis ça ? Le blind test où on devine <em>qui</em> a choisi le son.</p>
       </div>
       <div class="card">
+        <button class="profile-pick" id="profileBtn" type="button" aria-label="Choisir ma photo de profil">
+          <span class="profile-preview" id="profilePreview"></span>
+          <span class="profile-text"><strong>Ta photo de profil</strong><span>Avatar, skin Minecraft ou ta photo</span></span>
+          <span class="profile-edit">Changer</span>
+        </button>
         <label class="label" for="nameInput">Ton pseudo</label>
         <input id="nameInput" class="input" maxlength="20" autocomplete="nickname" placeholder="DJ Canapé">
         <button class="btn btn-primary" id="createBtn">Créer une partie</button>
@@ -72,8 +78,8 @@
       <div class="card settings" data-settings></div>
       <div class="card">
         <div class="card-head">
-          <h2>Joueurs</h2>
-          <span class="muted" id="lobbyCount"></span>
+          <h2>Joueurs <span class="muted" id="lobbyCount"></span></h2>
+          <button class="btn btn-ghost btn-small" data-open-avatar type="button">Ma photo</button>
         </div>
         <ul class="player-list" id="lobbyPlayers"></ul>
       </div>
@@ -109,13 +115,13 @@
         <p class="muted center" id="stageInfo"></p>
       </div>
       <div class="deliberate hidden" id="deliberateBanner">
-        <strong>Vous n'êtes pas d'accord</strong>
-        <span>Débattez : ceux qui n'ont pas encore voté ont un peu plus de temps pour se décider.</span>
-        <ul class="tally" id="tally"></ul>
+        <strong>Prolongation</strong>
+        <span>Ceux qui n'ont pas encore voté ont un peu plus de temps pour se décider.</span>
       </div>
       <div class="vinyl-wrap">
         <div class="vinyl" id="guessVinyl"><img id="guessCover" alt=""><span class="vinyl-mystery hidden" id="guessMystery" aria-hidden="true">?</span></div>
       </div>
+      <div class="eq" id="eq" aria-hidden="true"></div>
       <div class="track-info">
         <div class="track-title" id="guessTitle"></div>
         <div class="track-artist" id="guessArtist"></div>
@@ -145,7 +151,12 @@
           <div class="track-artist" id="revealArtist"></div>
         </div>
       </div>
-      <div class="reveal-owner" id="revealOwner"></div>
+      <div class="flip" id="revealFlip">
+        <div class="flip-inner">
+          <div class="flip-face flip-front" aria-hidden="true"><small>Et c'était...</small><strong>?</strong></div>
+          <div class="flip-face flip-back reveal-owner" id="revealOwner"></div>
+        </div>
+      </div>
       <div class="card">
         <h2 id="revealListTitle">Votes</h2>
         <ul class="vote-list" id="revealVotes"></ul>
@@ -158,9 +169,16 @@
 
     <!-- End -->
     <section class="screen hidden" id="screen-end">
-      <h2 class="title center">Classement final</h2>
-      <p class="muted center" id="endRound"></p>
-      <ol class="ranking ranking-final" id="endRanking"></ol>
+      <div class="end-head">
+        <p class="eyebrow center" id="endRound"></p>
+        <h2 class="end-title center" id="endTitle"></h2>
+      </div>
+      <div class="podium-wrap">
+        <div class="spotlight" aria-hidden="true"></div>
+        <div class="podium" id="podium"></div>
+      </div>
+      <ol class="ranking ranking-rest" id="endRanking"></ol>
+      <button class="btn btn-link" id="replayBtn">Rejouer l'annonce</button>
       <div class="card settings" data-settings></div>
       <button class="btn btn-primary" id="restartBtn">Relancer une manche</button>
       <p class="muted center" id="endHint"></p>
@@ -185,13 +203,76 @@
     </div>
   </div>
 
+  <div class="modal hidden" id="avatarModal" role="dialog" aria-modal="true" aria-labelledby="avatarTitle">
+    <div class="modal-card avatar-card">
+      <div class="modal-head">
+        <h2 id="avatarTitle">Ta photo de profil</h2>
+        <button class="icon-btn icon-btn-small" data-close-avatar aria-label="Fermer">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="avatar-current" id="avatarCurrent"></div>
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" data-tab="preset" type="button">Avatars</button>
+        <button class="tab" role="tab" data-tab="minecraft" type="button">Minecraft</button>
+        <button class="tab" role="tab" data-tab="upload" type="button">Ma photo</button>
+        <button class="tab" role="tab" data-tab="none" type="button">Initiale</button>
+      </div>
+
+      <div class="tab-panel" data-panel="preset">
+        <div class="style-chips" id="styleChips"></div>
+        <div class="avatar-grid" id="presetGrid"></div>
+        <button class="btn btn-ghost btn-small" id="presetShuffle" type="button">Autres propositions</button>
+        <p class="muted small">Avatars générés par <a href="https://www.dicebear.com" target="_blank" rel="noopener">DiceBear</a>.</p>
+      </div>
+
+      <div class="tab-panel" data-panel="minecraft">
+        <p class="muted">Ton pseudo Minecraft (édition Java). Il peut être différent de ton pseudo dans la partie.</p>
+        <form class="row" id="mcForm" autocomplete="off">
+          <input class="input" id="mcInput" maxlength="16" placeholder="Pseudo Minecraft" autocapitalize="off" spellcheck="false" aria-label="Pseudo Minecraft">
+          <button class="btn btn-primary" type="submit" id="mcBtn">Afficher</button>
+        </form>
+        <p class="answer-feedback" id="mcStatus" aria-live="polite"></p>
+        <div class="choice-preview hidden" id="mcPreview">
+          <img id="mcImg" alt="Rendu du skin Minecraft">
+          <button class="btn btn-primary" id="mcUse" type="button">Utiliser ce skin</button>
+        </div>
+        <p class="muted small">Rendu inspiré de <a href="https://github.com/jensjeflensje/minecraft-skin-render" target="_blank" rel="noopener">minecraft-skin-render</a>.</p>
+      </div>
+
+      <div class="tab-panel" data-panel="upload">
+        <p class="muted">Une image de ton appareil, recadrée en carré. Elle n'est envoyée qu'aux joueurs de ta partie.</p>
+        <label class="btn btn-ghost upload-btn">Choisir une image
+          <input type="file" id="uploadInput" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+        </label>
+        <p class="answer-feedback" id="uploadStatus" aria-live="polite"></p>
+        <div class="choice-preview hidden" id="uploadPreview">
+          <img id="uploadImg" alt="Aperçu de ta photo">
+          <button class="btn btn-primary" id="uploadUse" type="button">Utiliser cette image</button>
+        </div>
+      </div>
+
+      <div class="tab-panel" data-panel="none">
+        <p class="muted">La première lettre de ton pseudo, sur une couleur.</p>
+        <div class="choice-preview" id="nonePreview"></div>
+        <button class="btn btn-primary" id="noneUse" type="button">Utiliser mon initiale</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <!-- Calques d'animation : ambiance des dernières secondes, annonces, confettis. -->
+  <div class="hurry-vignette" aria-hidden="true"></div>
+  <div class="splash" id="splash" aria-hidden="true"><small id="splashKicker"></small><strong id="splashText"></strong></div>
+  <canvas class="confetti" id="confetti" aria-hidden="true"></canvas>
 
   <script src="vendor/peerjs.min.js"></script>
   <script src="config.js"></script>
   <script src="catalog.js"></script>
   <script src="game.js"></script>
   <script src="deezer.js"></script>
+  <script src="minecraft.js"></script>
   <script src="net.js"></script>
   <script src="client.js"></script>
 </body>

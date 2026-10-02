@@ -76,6 +76,29 @@
     return arr;
   }
 
+  // Photo de profil : avatar DiceBear (style + graine) ou image envoyée par le joueur
+  // (photo ou rendu de skin Minecraft), petite image PNG/JPEG/WebP en data URL.
+  const AVATAR_IMAGE_MAX = 48000; // caractères, soit ~35 Ko d'image
+  const IMAGE_DATA = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+
+  function cleanAvatar(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    if (raw.kind === 'preset') {
+      if (!Catalog.avatarStyle(raw.style)) return null;
+      const seed = cleanText(raw.seed, 40);
+      return seed ? { kind: 'preset', style: raw.style, seed } : null;
+    }
+    if (raw.kind === 'image') {
+      const data = String(raw.data || '');
+      if (data.length > AVATAR_IMAGE_MAX || !IMAGE_DATA.test(data)) return null;
+      const source = raw.source === 'minecraft' ? 'minecraft' : 'upload';
+      const avatar = { kind: 'image', source, data };
+      if (source === 'minecraft') avatar.mc = cleanText(raw.mc, 16);
+      return avatar;
+    }
+    return null;
+  }
+
   function publicTrack(t) {
     if (!t) return null;
     return { id: t.id, title: t.title, artist: t.artist, album: t.album, cover: t.cover, coverBig: t.coverBig, preview: t.preview };
@@ -130,6 +153,9 @@
       played: new Set(), // sons déjà joués en blind test, pour ne pas les répéter
       reveal: null,
       pastScores: new Map(), // pseudo (minuscule) -> score, pour qui revient après une déconnexion
+      // Images d'avatar déjà envoyées à chaque joueur (destinataire -> joueur -> version),
+      // pour ne pas renvoyer des dizaines de Ko à chaque état.
+      avatarSent: new Map(),
       destroyed: false,
     };
 
@@ -175,7 +201,12 @@
       room.votes.clear();
       room.offTheme.clear();
       room.reveal = null;
-      for (const p of room.players.values()) p.active = true;
+      // Chaque manche repart de zéro.
+      room.pastScores.clear();
+      for (const p of room.players.values()) {
+        p.active = true;
+        p.score = 0;
+      }
     }
 
     function resolveTheme() {
@@ -335,6 +366,20 @@
 
     // ------------------------------------------------------------ état envoyé aux joueurs
 
+    function avatarFor(recipient, p) {
+      const a = p.avatar;
+      if (!a) return null;
+      if (a.kind === 'preset') return { rev: p.avatarRev, kind: 'preset', style: a.style, seed: a.seed };
+      let sent = room.avatarSent.get(recipient);
+      if (!sent) room.avatarSent.set(recipient, (sent = new Map()));
+      const out = { rev: p.avatarRev, kind: 'image', source: a.source };
+      if (sent.get(p.id) !== p.avatarRev) {
+        out.data = a.data;
+        sent.set(p.id, p.avatarRev);
+      }
+      return out;
+    }
+
     // État personnalisé : chaque joueur ne voit que ses propres picks, et jamais la réponse
     // d'un blind test avant le reveal.
     function stateFor(pid) {
@@ -359,6 +404,7 @@
           score: p.score,
           active: p.active,
           picked: room.phase === 'pick' ? (room.picks.get(p.id) || []).length : 0,
+          avatar: avatarFor(pid, p),
         })),
       };
 
@@ -375,15 +421,7 @@
         s.candidates = candidates()
           .filter((id) => id !== pid)
           .map((id) => ({ id, name: room.players.get(id).name }));
-        if (room.phase === 'deliberate') {
-          // Répartition anonyme des votes pour lancer le débat.
-          const tally = {};
-          for (const target of room.votes.values()) tally[target] = (tally[target] || 0) + 1;
-          s.tally = candidates()
-            .map((id) => ({ id, name: room.players.get(id).name, count: tally[id] || 0 }))
-            .filter((t) => t.count > 0)
-            .sort((a, b) => b.count - a.count);
-        }
+        // Aucune information sur les votes des autres avant le reveal du son.
       }
       if (isQuiz() && room.phase === 'guess') {
         // Seulement l'extrait : ni titre, ni artiste, ni pochette.
@@ -419,6 +457,7 @@
       const player = room.players.get(pid);
       if (!player) return;
       room.players.delete(pid);
+      room.avatarSent.delete(pid);
       if (player.score !== 0) room.pastScores.set(player.name.toLowerCase(), player.score);
       room.votes.delete(pid);
       room.offTheme.delete(pid);
@@ -459,6 +498,8 @@
         // Un joueur qui arrive pendant la phase pick peut encore jouer la manche.
         active: room.phase === 'pick',
         lastAnswer: 0,
+        avatar: cleanAvatar(payload && payload.avatar),
+        avatarRev: 1,
       });
       room.pastScores.delete(lower);
       if (!room.hostId) room.hostId = pid;
@@ -636,8 +677,20 @@
       return { ok: true, found, gained, title: a.title !== null, artist: a.artist !== null };
     }
 
+    function onAvatar(pid, payload) {
+      const p = room.players.get(pid);
+      const raw = payload && payload.avatar;
+      const avatar = cleanAvatar(raw);
+      if (raw && !avatar) return { error: 'Image refusée : trop lourde ou format non pris en charge.' };
+      p.avatar = avatar;
+      p.avatarRev++;
+      broadcast();
+      return { ok: true };
+    }
+
     const handlers = {
       join: onJoin,
+      avatar: onAvatar,
       settings: onSettings,
       start: onStart,
       pick: onPick,

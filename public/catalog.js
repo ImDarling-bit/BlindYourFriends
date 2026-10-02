@@ -66,6 +66,24 @@
   ];
   const DEFAULT_SOURCE = 'hits';
 
+  // Styles d'avatars générés par DiceBear (https://www.dicebear.com), à partir d'une graine.
+  const AVATAR_STYLES = [
+    { id: 'adventurer', label: 'Aventurier' },
+    { id: 'avataaars', label: 'Cartoon' },
+    { id: 'big-smile', label: 'Sourire' },
+    { id: 'lorelei', label: 'Lorelei' },
+    { id: 'micah', label: 'Micah' },
+    { id: 'notionists', label: 'Croquis' },
+    { id: 'personas', label: 'Personas' },
+    { id: 'pixel-art', label: 'Pixel' },
+    { id: 'bottts', label: 'Robots' },
+    { id: 'thumbs', label: 'Pouces' },
+  ];
+
+  function avatarUrl(style, seed) {
+    return `https://api.dicebear.com/9.x/${encodeURIComponent(style)}/svg?seed=${encodeURIComponent(seed)}`;
+  }
+
   const byId = (list, id) => list.find((x) => x.id === id) || null;
 
   // ---------------------------------------------------------------- réponses tapées
@@ -183,6 +201,9 @@
     theme: (id) => byId(THEMES, id),
     source: (id) => byId(SOURCES, id),
     isQuiz: (mode) => QUIZ_MODES.includes(mode),
+    AVATAR_STYLES,
+    avatarStyle: (id) => byId(AVATAR_STYLES, id),
+    avatarUrl,
     matchAnswer,
     normalize,
   };

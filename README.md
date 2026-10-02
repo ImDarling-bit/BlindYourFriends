@@ -24,14 +24,25 @@ Ouvrir le lien d'invitation (ou la page du jeu, puis taper le code à 4 lettres)
 
 ## Modes de jeu
 
-L'hôte choisit le mode dans le lobby (et peut en changer en fin de manche ; les scores se cumulent).
+L'hôte choisit le mode dans le lobby (et peut en changer en fin de manche). Chaque manche repart de zéro et se termine par un podium animé : le gagnant, puis la lanterne rouge.
 
-- **BlindYourFriends** : chacun choisit en secret le nombre de sons fixé par l'hôte (1 à 5, 30 s par son). Les sons passent un par un (30 s chacun) et on vote pour la personne qui l'a mis ; le premier vote est définitif et le propriétaire ne vote pas. Si les premiers votes divergent et qu'il reste des indécis, 30 s de délibération. Points : +100 par bonne réponse, +50 pour le propriétaire par joueur piégé.
+- **BlindYourFriends** : chacun choisit en secret le nombre de sons fixé par l'hôte (1 à 5, 30 s par son). Les sons passent un par un (30 s chacun) et on vote pour la personne qui l'a mis ; le premier vote est définitif et le propriétaire ne vote pas. Si les votes déjà donnés divergent et qu'il reste des indécis, 30 s de prolongation ; personne ne voit les votes des autres avant le reveal. Points : +100 par bonne réponse, +50 pour le propriétaire par joueur piégé.
 - **BlindYourFriends à thème** : pareil, avec un thème imposé (liste, thème libre ou tirage au sort). Pendant l'écoute, on peut signaler un son « hors thème » : si la majorité des autres joueurs le signale, son propriétaire perd 100 points.
 - **Blind test** : le jeu choisit les sons (5 à 20) dans un style choisi par l'hôte, à partir des classements et playlists Deezer. On tape le titre ou l'artiste, avec tolérance aux accents et petites fautes. +100 le titre, +100 l'artiste, +50 au premier qui trouve chacun. Le titre et la pochette restent cachés jusqu'au reveal.
 - **Blind test progressif** : l'extrait dure 1 s, 2 s, 4 s, 8 s, 16 s puis 30 s, avec 5 s pour répondre après chacun. Trouver vaut 1000, 800, 600, 400, 250 ou 100 points selon l'étape, moitié pour le titre, moitié pour l'artiste.
 
 Les règles du mode en cours sont aussi dans le jeu (bouton `?` en bas à droite) et le volume se règle dans la barre du haut.
+
+## Photos de profil
+
+Chaque joueur choisit sa photo depuis l'accueil (ou le bouton « Ma photo » du lobby) ; elle est gardée sur l'appareil :
+
+- **Avatars générés** par l'API publique [DiceBear](https://www.dicebear.com) : 10 styles, à partir du pseudo, donc cohérents d'une partie à l'autre.
+- **Skin Minecraft** : à partir du pseudo Minecraft (édition Java), qui peut être différent du pseudo dans la partie. Le skin vient de [playerdb.co](https://playerdb.co) (secours : [mc-heads.net](https://mc-heads.net)) et le buste est dessiné dans le navigateur par `public/minecraft.js`, un portage en JavaScript de [minecraft-skin-render](https://github.com/jensjeflensje/minecraft-skin-render) (licence MIT).
+- **Image personnelle** : recadrée en carré et compressée sur l'appareil (moins de 35 Ko).
+- **Initiale** sur une couleur, par défaut.
+
+L'hôte vérifie chaque image (PNG, JPEG ou WebP, taille limitée) et ne l'envoie qu'une fois à chaque joueur.
 
 ## Réglages (`public/config.js`)
 

@@ -277,7 +277,9 @@ async function main() {
   console.log('\nManche 2 : 1 son chacun, déconnexion pendant la préparation');
   check((await emit(A, 'settings', { songsPerPlayer: 1 })).ok, "l'hôte repasse à 1 son en fin de manche");
   check((await emit(A, 'start')).ok, "l'hôte relance une manche");
-  await Promise.all(all.map((c) => waitFor(c, (s) => s.phase === 'pick' && s.round === 2, 'pick manche 2')));
+  const pick2 = await Promise.all(all.map((c) => waitFor(c, (s) => s.phase === 'pick' && s.round === 2, 'pick manche 2')));
+  check(pick2[0].players.every((p) => p.score === 0), 'nouvelle manche : tous les scores repartent de zéro');
+  for (const id of Object.keys(expected)) expected[id] = 0;
   await emit(A, 'pick', { id: ra[3].id });
   await emit(B, 'pick', { id: rb[2].id });
   await sleep(50);
@@ -291,7 +293,7 @@ async function main() {
   const C2 = client('Chloé (retour)');
   check((await join(C2, chloeName.toLowerCase())).ok, 'Chloé revient en cours de manche');
   const c2s = await waitFor(C2, (s) => s.phase === 'guess', 'état pour Chloé');
-  check(c2s.players.find((p) => p.id === C2.id).score === chloeScore, `score de Chloé restauré (${chloeScore})`);
+  check(c2s.players.find((p) => p.id === C2.id).score === chloeScore, `score de Chloé dans la manche conservé (${chloeScore})`);
   check(c2s.canVote === false && !!(await emit(C2, 'vote', { targetId: A.id })).error, 'Chloé ne vote pas avant la prochaine manche');
   expected[C2.id] = chloeScore;
 
@@ -305,7 +307,7 @@ async function main() {
     check(rs.reveal.ownerId === ownerId, `son ${k} : ${voter.label} trouve, reveal immédiat`);
   }
   const end2 = await waitFor(A, (s) => s.phase === 'end' && s.round === 2, 'fin manche 2');
-  check(end2.players.every((p) => p.score === expected[p.id]), `scores cumulés : ${end2.players.map((p) => `${p.name}=${p.score}`).join(', ')}`);
+  check(end2.players.every((p) => p.score === expected[p.id]), `scores de la manche 2 seule : ${end2.players.map((p) => `${p.name}=${p.score}`).join(', ')}`);
 
   // ------------------------------------------------------------ Délibération (4 joueurs)
   console.log('\nDélibération : partie à 4 joueurs, 1 son chacun');
@@ -334,7 +336,9 @@ async function main() {
     check(H.state.phase === 'guess', `son ${k} : votes divergents mais ${Z.label} n'a pas voté, l'écoute continue`);
     const d = await waitFor(H, (s) => s.phase === 'deliberate' && s.sound.index === k, `délibération ${k}`);
     check(Date.now() - t0 >= 2500, `son ${k} : délibération à la fin de l'écoute`);
-    check(d.tally.reduce((n, t) => n + t.count, 0) === 2 && !JSON.stringify(d.tally).includes('voterId'), 'répartition anonyme des 2 votes');
+    check(!('tally' in d) && !('voteCount' in d), 'prolongation : aucune information sur les votes en cours');
+    const dz = await waitFor(Z, (s) => s.phase === 'deliberate' && s.sound.index === k, `prolongation vue par ${Z.label}`);
+    check(dz.myVote === null && !('tally' in dz), `${Z.label}, qui n'a pas voté, ne voit rien des votes des autres`);
     check(/verrouillé/.test((await emit(Y, 'vote', { targetId: owner.id })).error || ''), 'pas de changement de vote en délibération');
     const t1 = Date.now();
     if (k === 1) {
@@ -347,6 +351,40 @@ async function main() {
     check(r4.players.every((p) => p.score === expected4[p.id]), `scores : ${r4.players.map((p) => `${p.name}=${p.score}`).join(', ')}`);
   }
   room4.destroy();
+
+  // ------------------------------------------------------------ Photos de profil
+  console.log('\nPhotos de profil');
+  const roomA = makeRoom();
+  const [V1, V2, V3] = ['Uma', 'Vic', 'Wes'].map((n) => client(n, roomA));
+  // Petite image PNG valide (1 x 1 pixel).
+  const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  check((await join(V1, 'Uma')).ok, 'Uma rejoint avec son initiale');
+  check((await emit(V2, 'join', { name: 'Vic', token: 'v', avatar: { kind: 'preset', style: 'adventurer', seed: 'Vic' } })).ok, 'Vic rejoint avec un avatar généré');
+  check((await emit(V3, 'join', { name: 'Wes', token: 'w', avatar: { kind: 'image', source: 'minecraft', mc: 'jeb_', data: PNG } })).ok, 'Wes rejoint avec un skin Minecraft');
+  const a1 = await waitFor(V1, (s) => s.players.length === 3, 'avatars', 0);
+  const byName = (st, n) => st.players.find((p) => p.name === n);
+  check(byName(a1, 'Uma').avatar === null, "Uma n'a pas d'avatar : initiale");
+  check(byName(a1, 'Vic').avatar.kind === 'preset' && byName(a1, 'Vic').avatar.style === 'adventurer', 'Uma reçoit le style et la graine de Vic');
+  check(byName(a1, 'Wes').avatar.data === PNG && byName(a1, 'Wes').avatar.source === 'minecraft', "Uma reçoit l'image de Wes");
+  const rev1 = byName(a1, 'Wes').avatar.rev;
+  await emit(V2, 'settings', {}); // provoque un nouvel état (refusé : Vic n'est pas l'hôte)
+  await emit(V1, 'settings', { songsPerPlayer: 1 });
+  const a2 = await waitFor(V1, (s) => s.settings.songsPerPlayer === 1, 'état suivant', 0);
+  check(!('data' in byName(a2, 'Wes').avatar) && byName(a2, 'Wes').avatar.rev === rev1, "l'image n'est envoyée qu'une fois à chaque joueur");
+  check(/refusée/.test((await emit(V1, 'avatar', { avatar: { kind: 'image', data: 'data:image/svg+xml;base64,PHN2Zz4=' } })).error || ''), 'image SVG refusée');
+  check(/refusée/.test((await emit(V1, 'avatar', { avatar: { kind: 'image', data: `data:image/png;base64,${'A'.repeat(60000)}` } })).error || ''), 'image trop lourde refusée');
+  check(/refusée/.test((await emit(V1, 'avatar', { avatar: { kind: 'preset', style: 'inconnu', seed: 'x' } })).error || ''), 'style inconnu refusé');
+  check((await emit(V3, 'avatar', { avatar: { kind: 'image', source: 'upload', data: PNG } })).ok, 'Wes change de photo');
+  const a3 = await waitFor(V1, (s) => (byName(s, 'Wes')?.avatar?.rev || 0) > rev1, 'nouvelle photo', 0);
+  check(byName(a3, 'Wes').avatar.data === PNG && byName(a3, 'Wes').avatar.source === 'upload', 'la nouvelle photo est renvoyée à tous');
+  check((await emit(V2, 'avatar', { avatar: null })).ok, 'Vic revient à son initiale');
+  const a4 = await waitFor(V1, (s) => byName(s, 'Vic')?.avatar === null, 'retour à l’initiale', 0);
+  check(!!a4, "les autres voient l'initiale de Vic");
+  const bad = client('Xan', roomA);
+  check((await emit(bad, 'join', { name: 'Xan', token: 'x', avatar: { kind: 'image', data: 'javascript:alert(1)' } })).ok, 'avatar invalide à l’arrivée : ignoré, le joueur entre quand même');
+  const a5 = await waitFor(V1, (s) => s.players.length === 4, 'Xan', 0);
+  check(byName(a5, 'Xan')?.avatar === null, 'Xan a son initiale');
+  roomA.destroy();
 
   // ------------------------------------------------------------ Mode à thème
   console.log('\nMode BlindYourFriends à thème : 3 joueurs, 1 son chacun');
@@ -394,6 +432,14 @@ async function main() {
     if (k === 3) check(!o.penalized && o.count === 0, 'personne ne signale : pas de pénalité');
     check(r.players.every((p) => p.score === expectedT[p.id]), `scores : ${r.players.map((p) => `${p.name}=${p.score}`).join(', ')}`);
   }
+  // Retour après une coupure, avec un score non nul : il est restauré.
+  const scored = T.find((p) => expectedT[p.id] > 0);
+  await waitFor(T[0], (s) => s.phase === 'end', 'fin de la manche à thème');
+  disconnect(scored);
+  const back = client(`${scored.label} (retour)`, roomT);
+  await join(back, scored.label);
+  const backState = await waitFor(back, (s) => s.players.some((p) => p.id === back.id), 'retour', 0);
+  check(backState.players.find((p) => p.id === back.id).score === expectedT[scored.id], `retour après coupure : score de ${scored.label} restauré (${expectedT[scored.id]})`);
   roomT.destroy();
 
   // ------------------------------------------------------------ Blind test classique
